@@ -11,19 +11,23 @@ endif
 .PHONY:init debug build release run clean
 
 init:
-	cmake -S . -B build
+	cmake -S . -B build -DCMAKE_CXX_COMPILER=g++-16
 	ln -s  build/compile_commands.json compile_commands.json
 
 build:
-	cmake -S . -B build
+	cmake -S . -B build -DCMAKE_CXX_COMPILER=g++-16
 	cmake --build build --verbose
 
 debug:
-	cmake -DCMAKE_BUILD_TYPE=Debug -S . -B build
+	cmake \
+		-DCMAKE_CXX_COMPILER=g++-16 \
+		-DCMAKE_BUILD_TYPE=Debug \
+		-S . -B build
 	cmake --build build --verbose
 
 release:
 	cmake \
+		-DCMAKE_CXX_COMPILER=g++-16 \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX=./install \
 		-S . -B release

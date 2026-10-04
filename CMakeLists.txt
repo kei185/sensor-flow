@@ -22,13 +22,13 @@ file(
     src/*.hpp
 )
 
-find_package(Boost REQUIRED COMPONENTS crc)
+find_package(Boost REQUIRED)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
     add_library(sensor-flow SHARED)
     # 使うやつに要求標準を知らせる
     target_compile_features(sensor-flow PUBLIC cxx_std_23)
-    target_link_libraries(sensor-flow PRIVATE Boost::crc)
+    target_link_libraries(sensor-flow PRIVATE Boost::boost)
 
     # CMAKE_INSTALL_* を使う
     include(GNUInstallDirs)
@@ -57,6 +57,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 else()
     add_executable(main  ${SRC} src/main.cpp)
     target_include_directories(main PUBLIC src)
-    target_link_libraries(main PRIVATE Boost::crc)
+    target_link_libraries(main PRIVATE Boost::boost)
     # add_executable(main src/main.cpp)
 endif()
