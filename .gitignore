@@ -1,5 +1,9 @@
 
 /build
 /debug
+/release
+/install
+
+
 /.zed
 compile_commands.json

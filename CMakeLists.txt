@@ -9,18 +9,54 @@ set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g -O0")
 project(myplot LANGUAGES CXX)
 
 file(
-    GLOB MAIN
-    src/*.cpp
+    GLOB SRC
+    src/manager.cpp
     src/core/*.cpp
     src/demo/*.cpp
     src/utility/*.cpp
     src/worker/*.cpp
 )
-# file(GLOB MAIN src/main.cpp)
+
+file(
+    GLOB_RECURSE HEADER
+    src/*.hpp
+)
 
 find_package(Boost REQUIRED COMPONENTS crc)
-add_executable(main ${MAIN})
 
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_library(sensor-flow SHARED)
+    # 使うやつに要求標準を知らせる
+    target_compile_features(sensor-flow PUBLIC cxx_std_23)
+    target_link_libraries(sensor-flow PRIVATE Boost::crc)
 
-target_include_directories(main PUBLIC src)
-target_link_libraries(main PRIVATE Boost::crc)
+    # CMAKE_INSTALL_* を使う
+    include(GNUInstallDirs)
+    target_sources(sensor-flow
+        # ソースをいれる
+        PRIVATE
+            ${SRC}
+        PUBLIC
+        # ヘッダの集合を宣言する
+            FILE_SET HEADERS
+            # FILE_SET　の　BASE DIR
+            BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            # ヘッダの集合に入れるファイルを指定する
+            FILES ${HEADER}
+
+        )
+
+    install(TARGETS sensor-flow
+                EXPORT sensor-flow
+                # オブジェクトファイル置き場所
+                LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                # ヘッダーファイル置き場所
+                FILE_SET HEADERS
+                    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+            )
+else()
+    add_executable(main  ${SRC} src/main.cpp)
+    target_include_directories(main PUBLIC src)
+    target_link_libraries(main PRIVATE Boost::crc)
+    # add_executable(main src/main.cpp)
+endif()

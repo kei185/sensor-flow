@@ -8,7 +8,7 @@ ifeq ($(KERNEL), Linux)
 	PORT:=$(shell ls /dev/ttyACM* )
 endif
 
-.PHONY:init debug build clean
+.PHONY:init debug build release run clean
 
 init:
 	cmake -S . -B build
@@ -22,6 +22,14 @@ debug:
 	cmake -DCMAKE_BUILD_TYPE=Debug -S . -B build
 	cmake --build build --verbose
 
+release:
+	cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=./install \
+		-S . -B release
+	cmake --build release --verbose
+	cmake --install release --verbose
+
 run:
 	build/main ${PORT}
 
@@ -30,4 +38,4 @@ format:
 	clang-format -i ${FORMAT_FILE}
 
 clean:
-	rm -rf build
+	rm -rf build release install debug
