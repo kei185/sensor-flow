@@ -3,13 +3,13 @@
 #include "core/frame.hpp"
 #include "core/io.hpp"
 #include "core/xqueue.hpp"
+#include "core/transmitter.hpp"
 #include "utility/error.hpp"
 #include "utility/logger.hpp"
 #include "utility/unwrap.hpp"
 #include "worker/distributor.hpp"
 #include "worker/parser.hpp"
 #include "worker/receiver.hpp"
-#include "worker/transmitter.hpp"
 
 #include <cstddef>
 #include <expected>
@@ -26,7 +26,8 @@ namespace manager
 DataStreams::DataStreams()
     : system(std::make_unique<xqueue::Queue<frame::systemMessage>>()),
       lidar(std::make_unique<xqueue::Queue<frame::LidarPoint>>()),
-      imu(std::make_unique<xqueue::Queue<frame::Imu>>())
+      imu(std::make_unique<xqueue::Queue<frame::Imu>>()),
+      encoder(std::make_unique<xqueue::Queue<frame::Encoder>>())
 {}
 
 // TODO: low priority constructor injection　のほうがわかりやすいかも
@@ -47,12 +48,12 @@ Manager::Manager(const std::string file)
         this->receiverWorker.instance =
                 std::make_unique<receiver::Receiver>(this->port, *this->frameStreams);
 
-        logger::log("RECEIVER DISPATCHED");
+        logger::log("RECEIVER INITIALIZED");
 
         // prepare parsers
         unwrap(Manager::initParsers(this->parsers, *this->frameStreams, this->dataStreams));
 
-        logger::log("PARSERS DISPATCHED");
+        logger::log("PARSERS INITIALIZED");
 
         // prepare distributors
         unwrap(Manager::initDistributors(
@@ -60,7 +61,7 @@ Manager::Manager(const std::string file)
                 this->dataStreams,
                 *this->transmitter));
 
-        logger::log("DISTRIBUTORS DISPATCHED");
+        logger::log("DISTRIBUTORS INITIALIZED");
 
         logger::log("APPLICATION RUNNING\n");
 }
@@ -84,12 +85,16 @@ std::expected<void, Error> Manager::run()
                 return _result;
 
         for (auto& [_, p] : this->parsers)
-                if (auto _result = p.dispatch(); !_result.has_value())
+                if (auto _result = p.dispatch(); !_result.has_value()) {
+                        logger::log(std::format("ERROR PARSER TYPE {}", frame::toString(_)));
                         return _result;
+                }
 
         for (auto& [_, d] : this->distributors)
-                if (auto _result = d.dispatch(); !_result.has_value())
+                if (auto _result = d.dispatch(); !_result.has_value()) {
+                        logger::log(std::format("ERROR DISTRIBUTOR TYPE {}", frame::toString(_)));
                         return _result;
+                }
 
         this->receiverWorker.thread.join();
 
@@ -125,7 +130,11 @@ std::expected<void, Error> Manager::initParsers(
                 frameStreams[type],
                 *streams.imu);
 
-        // TODO 追加する
+        type                   = frame::Type::ENCODER;
+        parsers[type].instance = std::make_unique<parser::Parser<frame::Encoder>>(
+                type,
+                frameStreams[type],
+                *streams.encoder);
 
         return {};
 }
@@ -154,7 +163,9 @@ std::expected<void, Error> Manager::initDistributors(
         distributors[type].instance =
                 std::make_unique<distributor::Plotter<frame::Imu>>(type, *streams.imu);
 
-        // TODO 追加する
+        type = frame::Type::ENCODER;
+        distributors[type].instance =
+                std::make_unique<distributor::Plotter<frame::Encoder>>(type, *streams.encoder);
 
         return {};
 }

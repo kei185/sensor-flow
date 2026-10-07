@@ -31,6 +31,8 @@ template <typename T> struct Parser : public ParserBase
 
 template <typename T> void Parser<T>::run(std::stop_token st)
 {
+        logger::log("PARSER DISPATCHED");
+
         while (!st.stop_requested()) {
                 if (this->inQueue.empty())
                         continue;

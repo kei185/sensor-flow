@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_FLAGS "-Werror")
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g -O0")
 
-project(myplot LANGUAGES CXX)
+project(sf LANGUAGES CXX)
 
 file(
     GLOB SRC
@@ -56,7 +56,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
             )
 else()
     add_executable(main  ${SRC} src/main.cpp)
+    # add_executable(main src/main.cpp)
     target_include_directories(main PUBLIC src)
     target_link_libraries(main PRIVATE Boost::boost)
-    # add_executable(main src/main.cpp)
 endif()

@@ -1,6 +1,5 @@
-#include "worker/distributor.hpp"
-
 #include "core/protocol.hpp"
+#include "worker/distributor.hpp"
 #include "demo/gnuplot.hpp"
 
 #include <stop_token>
@@ -39,6 +38,21 @@ template <> void Plotter<frame::LidarPoint>::run(std::stop_token st)
 template <> void Plotter<frame::Imu>::run(std::stop_token st)
 {
         demo::runImuOrientation(st, this->inQueue);
+}
+
+/**
+ * Encoder
+ */
+
+template <> void Plotter<frame::Encoder>::run(std::stop_token st)
+{
+        // TODO
+        while (!st.stop_requested()) {
+                if (this->inQueue.empty())
+                        continue;
+
+                this->inQueue.pop();
+        }
 }
 
 } // namespace distributor

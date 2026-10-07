@@ -3,11 +3,11 @@
 #include "core/frame.hpp"
 #include "core/io.hpp"
 #include "core/xqueue.hpp"
+#include "core/transmitter.hpp"
 #include "utility/error.hpp"
 #include "worker/distributor.hpp"
 #include "worker/parser.hpp"
 #include "worker/receiver.hpp"
-#include "worker/transmitter.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -51,16 +51,17 @@ template <typename T, Error InitError> struct Worker
         }
 };
 
-using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_INIT_FAILED>;
-using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_INIT_FAILED>;
-using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_INIT_FAILED>;
+using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_DISPATCH_FAILED>;
+using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_DISPATCH_FAILED>;
+using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_DISPATCH_FAILED>;
 
-// TODO typeのmapにしたほうがいい
 struct DataStreams
 {
         std::unique_ptr<xqueue::Queue<frame::systemMessage>> system;
         std::unique_ptr<xqueue::Queue<frame::LidarPoint>>    lidar;
         std::unique_ptr<xqueue::Queue<frame::Imu>>           imu;
+        std::unique_ptr<xqueue::Queue<frame::Encoder>>       encoder;
+
         DataStreams();
 };
 

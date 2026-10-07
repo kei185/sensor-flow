@@ -2,7 +2,7 @@
 
 #include "core/frame.hpp"
 #include "core/xqueue.hpp"
-#include "worker/transmitter.hpp"
+#include "core/transmitter.hpp"
 
 #include <stop_token>
 

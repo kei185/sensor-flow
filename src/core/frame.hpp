@@ -17,12 +17,18 @@ namespace frame
 extern const std::chrono::milliseconds OPERATION_TIMEOUT;
 extern const uint8_t                   START_OF_FRAME[];
 
+/**
+ * Host -> MCU
+ * command type
+ */
 enum class OperationType
 {
         // WAIT_READY,
         // GET_STATUS,
         START_SCAN,
         // END_SCAN,
+        START_TIME_SYNC,
+        TIME,
 };
 
 /**
@@ -41,35 +47,50 @@ constexpr std::string_view toString(OperationType type)
                         return "START_SCAN";
                 // case OperationType::END_SCAN:
                 //         return "END_SCAN";
+                case OperationType::START_TIME_SYNC:
+                        return "START_TIME_SYNC";
+                case OperationType::TIME:
+                        return "TIME";
                 default:
                         return "UNKNOWN";
         }
 }
 
+/**
+ * MCU -> Host
+ * frame type
+ */
 enum class Type : uint8_t
 {
         // Internal queue category; not a wire type.
         SYSTEM = 0x00,
         // below are wire types
-        LIDAR          = 0x01,
-        IMU            = 0x02,
-        ENCODER        = 0x03,
-        INITIALIZING   = 0x04,
-        DEVICE_INFO    = 0x05,
-        HEALTH_STATUS  = 0x06,
-        READY          = 0x07,
-        STARTUP_FAILED = 0x08,
-        START_SCAN_ACK = 0x09,
-        UNKNOWN        = 0x10,
+        LIDAR               = 0x01,
+        IMU                 = 0x02,
+        ENCODER             = 0x03,
+        INITIALIZING        = 0x04,
+        DEVICE_INFO         = 0x05,
+        HEALTH_STATUS       = 0x06,
+        READY               = 0x07,
+        STARTUP_FAILED      = 0x08,
+        START_SCAN_ACK      = 0x09,
+        START_TIME_SYNC_ACK = 0x0A,
+        TIME_ACK            = 0x0B,
+        TIME_REPORT         = 0x0C,
+        UNKNOWN             = 0x10,
 };
 
 extern const std::vector<Type> TYPES;
 
-constexpr Type ACK_TYPE(OperationType type)
+constexpr Type toAckType(OperationType type)
 {
         switch (type) {
                 case OperationType::START_SCAN:
                         return Type::START_SCAN_ACK;
+                case OperationType::START_TIME_SYNC:
+                        return Type::START_TIME_SYNC_ACK;
+                case OperationType::TIME:
+                        return Type::TIME_ACK;
                 default:
                         return Type::UNKNOWN;
         }
@@ -98,6 +119,12 @@ constexpr std::string_view toString(Type type)
                         return "STARTUP_FAILED";
                 case Type::START_SCAN_ACK:
                         return "START_SCAN_ACK";
+                case Type::START_TIME_SYNC_ACK:
+                        return "START_TIME_SYNC_ACK";
+                case Type::TIME_ACK:
+                        return "TIME_ACK";
+                case Type::TIME_REPORT:
+                        return "TIME_REPORT";
                 default:
                         return "UNKNOWN";
         }
@@ -119,6 +146,9 @@ constexpr Type frameQueueMUX(Type type)
                 case Type::READY:
                 case Type::STARTUP_FAILED:
                 case Type::START_SCAN_ACK:
+                case Type::START_TIME_SYNC_ACK:
+                case Type::TIME_ACK:
+                case Type::TIME_REPORT:
                         return Type::SYSTEM;
 
                 default:
@@ -169,6 +199,12 @@ struct Imu
 {
         Acceleration rot;
         Acceleration trans;
+};
+
+struct Encoder
+{
+        float right;
+        float left;
 };
 
 struct systemMessage
