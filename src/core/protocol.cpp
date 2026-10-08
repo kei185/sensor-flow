@@ -44,7 +44,7 @@ void run(
         std::println("press ENTER to start scan");
         std::string s;
         std::getline(std::cin, s);
-        unwrap(transmitter.request(st, frame::OperationType::START_SCAN, mQueue));
+        unwrap(transmitter.session(st, mQueue, frame::OperationType::START_SCAN));
 };
 
 } // namespace protocol
