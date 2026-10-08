@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <mutex>
 #include <span>
 #include <string>
 
@@ -18,6 +19,9 @@ struct Port
 {
         int            fd;
         struct termios tty;
+
+        std::mutex mutex;
+
         Port(std::string);
         ~Port();
 

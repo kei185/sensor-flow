@@ -17,12 +17,13 @@ struct Transmitter
       public:
         Transmitter(io::Port&);
 
-        std::expected<void, error::Error> transmit(frame::OperationType);
+        std::expected<void, error::Error> transmit(frame::OperationType, std::span<uint8_t> = {});
 
         std::expected<void, error::Error>
-        request(std::stop_token                      st,
-                frame::OperationType                 type,
-                xqueue::Queue<frame::systemMessage>& mQueue);
+        session(std::stop_token,
+                xqueue::Queue<frame::systemMessage>&,
+                frame::OperationType,
+                std::span<uint8_t> = {});
 };
 
 } // namespace transmitter

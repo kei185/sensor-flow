@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <format>
+#include <mutex>
 #include <span>
 #include <string>
 
@@ -18,7 +19,7 @@ namespace io
 {
 static int BAUD_RATE = B230400;
 
-Port::Port(std::string path)
+Port::Port(std::string path) : mutex(std::mutex())
 {
 
         logger::log(std::format("TRY OPEN [{}]", path));
@@ -32,6 +33,7 @@ Port::Port(std::string path)
         }
 
         logger::log(std::format(" [{}] OPENED", path));
+        logger::log(std::format(" [{}] BAUD_RATE: {}", path, BAUD_RATE));
 
         this->tty = {};
 

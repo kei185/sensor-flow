@@ -1,5 +1,4 @@
 #include "worker/parser.hpp"
-
 #include "core/frame.hpp"
 #include "utility/toInt.hpp"
 
@@ -58,6 +57,12 @@ template <> std::vector<frame::Imu> Parser<frame::Imu>::parsePayload(frame::Fram
                         .y = toSignedInt16(head += frame::IMU_ACCEL_VALUE_SIZE),
                         .z = toSignedInt16(head += frame::IMU_ACCEL_VALUE_SIZE),
                 }}};
+}
+
+// TODO
+template <> std::vector<frame::Encoder> Parser<frame::Encoder>::parsePayload(frame::Frame& fr)
+{
+        return {};
 }
 
 } // namespace parser

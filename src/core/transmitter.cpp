@@ -1,4 +1,4 @@
-#include "worker/transmitter.hpp"
+#include "core/transmitter.hpp"
 
 #include "core/frame.hpp"
 #include "core/io.hpp"
@@ -6,9 +6,12 @@
 #include "utility/logger.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <format>
+#include <ranges>
 #include <span>
 #include <stop_token>
+#include <vector>
 
 namespace transmitter
 {
@@ -18,13 +21,22 @@ Transmitter::Transmitter(io::Port& port) : port(port) {}
 /**
  * Transmits a frame of the given type of operation.
  */
-std::expected<void, error::Error> Transmitter::transmit(frame::OperationType type)
+std::expected<void, error::Error>
+Transmitter::transmit(frame::OperationType type, std::span<uint8_t> data)
 {
-        const auto& command = frame::OPERATION.at(type);
-
         logger::log(std::format("TRANSMIT {} TRY", frame::toString(type)));
 
-        auto result = this->port.writeRaw(std::span<const uint8_t>(command));
+        const auto command = frame::OPERATION.at(type);
+
+        std::vector<uint8_t> frame(command.begin(), command.end());
+        if (!data.empty())
+                frame.insert(frame.end(), data.begin(), data.end());
+
+        logger::log(std::format("frame: {}", frame | std::views::transform([](uint8_t x) {
+                                                     return std::format("{:#x}", x);
+                                             })));
+
+        auto result = this->port.writeRaw(std::span<const uint8_t>(frame));
         if (!result)
                 return result;
 
@@ -36,13 +48,14 @@ std::expected<void, error::Error> Transmitter::transmit(frame::OperationType typ
 /**
  * Sends a request to the transmitter and waits for an ACK response.
  */
-std::expected<void, error::Error> Transmitter::request(
+std::expected<void, error::Error> Transmitter::session(
         std::stop_token                      st,
+        xqueue::Queue<frame::systemMessage>& mQueue,
         frame::OperationType                 type,
-        xqueue::Queue<frame::systemMessage>& mQueue)
+        std::span<uint8_t>                   data)
 {
         // transmit
-        if (auto result = this->transmit(type); !result)
+        if (auto result = this->transmit(type, data); !result)
                 return result;
 
         // set timeout
@@ -65,7 +78,7 @@ std::expected<void, error::Error> Transmitter::request(
                 auto res = mQueue.pop();
 
                 logger::log(std::format("RECEIVED {}", res.message));
-                if (res.type == frame::ACK_TYPE(type))
+                if (res.type == frame::toAckType(type))
                         return {};
         }
 };
