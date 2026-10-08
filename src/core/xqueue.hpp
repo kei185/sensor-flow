@@ -8,14 +8,20 @@
 namespace xqueue
 {
 
-template <typename T> struct Queue
+struct QueueBase
+{
+        virtual ~QueueBase() = default;
+        virtual bool empty() = 0;
+};
+
+template <typename T> struct Queue : QueueBase
 {
         std::mutex    mutex;
         std::queue<T> queue;
 
         Queue() : mutex(std::mutex()), queue(std::queue<T>()) {}
 
-        bool empty()
+        bool empty() override
         {
                 this->mutex.lock();
 
