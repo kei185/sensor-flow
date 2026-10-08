@@ -55,7 +55,14 @@ using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_INIT_FAILED
 using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_INIT_FAILED>;
 using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_INIT_FAILED>;
 
-using DataStreams = std::map<frame::Type, std::unique_ptr<xqueue::QueueBase>>;
+// TODO typeのmapにしたほうがいい
+struct DataStreams
+{
+        std::unique_ptr<xqueue::Queue<frame::systemMessage>> system;
+        std::unique_ptr<xqueue::Queue<frame::LidarPoint>>    lidar;
+        std::unique_ptr<xqueue::Queue<frame::Imu>>           imu;
+        DataStreams();
+};
 
 struct Manager
 {
@@ -72,8 +79,6 @@ struct Manager
         Manager(const std::string);
         ~Manager();
         std::expected<void, Error> run();
-
-        static DataStreams initDataStreams();
 
         static std::expected<void, Error> initParsers(
                 std::map<frame::Type, ParserWorker>&,
