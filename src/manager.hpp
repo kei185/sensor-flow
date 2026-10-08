@@ -55,15 +55,7 @@ using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_DISPATCH_FA
 using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_DISPATCH_FAILED>;
 using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_DISPATCH_FAILED>;
 
-struct DataStreams
-{
-        std::unique_ptr<xqueue::Queue<frame::systemMessage>> system;
-        std::unique_ptr<xqueue::Queue<frame::LidarPoint>>    lidar;
-        std::unique_ptr<xqueue::Queue<frame::Imu>>           imu;
-        std::unique_ptr<xqueue::Queue<frame::Encoder>>       encoder;
-
-        DataStreams();
-};
+using DataStreams = std::map<frame::Type, std::unique_ptr<xqueue::QueueBase>>;
 
 struct Manager
 {

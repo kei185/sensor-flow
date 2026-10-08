@@ -31,8 +31,20 @@ classDiagram
     }
 
     class DataStreams {
-        +unique_ptr~queue_systemMessage~ system
-        +unique_ptr~queue_LidarPoint~ lidar
+        <<map Type to unique_ptr QueueBase>>
+    }
+
+    class QueueBase {
+        <<abstract>>
+        +empty() bool*
+    }
+
+    class Queue_T {
+        <<template T>>
+        +empty() bool
+        +push(T)
+        +push_range(vector_T)
+        +pop() T
     }
 
     class Receiver {
@@ -82,6 +94,8 @@ classDiagram
     }
 
     Manager *-- DataStreams : owns
+    DataStreams *-- QueueBase : owns queues by Type
+    QueueBase <|-- Queue_T
     Manager *-- Worker_T : owns workers
     Manager *-- Transmitter : owns
     Worker_T *-- Receiver : ReceiverWorker
@@ -105,6 +119,11 @@ using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_INIT_FAILED
 using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_INIT_FAILED>;
 using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_INIT_FAILED>;
 ```
+
+`DataStreams` owns the SYSTEM, LIDAR, IMU, and ENCODER queues in a
+`std::map<frame::Type, std::unique_ptr<xqueue::QueueBase>>`. Each concrete
+`Queue<T>` inherits `QueueBase`; parser and distributor initialization resolves
+the expected queue type before registering its worker.
 
 ## Data Flow
 
@@ -177,5 +196,5 @@ sequenceDiagram
 
 - The queues are accessed from multiple threads, but `std::queue` is not thread-safe. A synchronized queue abstraction is still required.
 - Empty queues are polled continuously, creating busy-wait loops. A condition variable or blocking queue would avoid unnecessary CPU use.
-- `frameStreams` and the queues inside `DataStreams` are heap-allocated even though `Manager` has sole ownership. They could be stored directly unless stable indirection is required.
+- `DataStreams` owns heterogeneous queues through `unique_ptr<QueueBase>`. Parsers and distributors borrow the concrete queues, so entries must not be erased or replaced while workers are running.
 - Initialization is listed explicitly for every frame type. This is verbose, but keeps the mapping between frame type, parsed data type, and distributor visible.

@@ -15,6 +15,7 @@
 #include <expected>
 #include <map>
 #include <memory>
+#include <utility>
 
 #include <unistd.h>
 
@@ -23,18 +24,55 @@ using namespace error;
 namespace manager
 {
 
-DataStreams::DataStreams()
-    : system(std::make_unique<xqueue::Queue<frame::systemMessage>>()),
-      lidar(std::make_unique<xqueue::Queue<frame::LidarPoint>>()),
-      imu(std::make_unique<xqueue::Queue<frame::Imu>>()),
-      encoder(std::make_unique<xqueue::Queue<frame::Encoder>>())
-{}
+namespace
+{
+
+template <typename T> xqueue::Queue<T>* findDataStream(DataStreams& streams, frame::Type type)
+{
+        auto stream = streams.find(type);
+        if (stream == streams.end())
+                return nullptr;
+
+        return dynamic_cast<xqueue::Queue<T>*>(stream->second.get());
+}
+
+DataStreams makeDataStreams()
+{
+        DataStreams streams;
+
+        for (auto type : frame::TYPES) {
+                std::unique_ptr<xqueue::QueueBase> stream;
+
+                switch (type) {
+                        case frame::Type::SYSTEM:
+                                stream = std::make_unique<xqueue::Queue<frame::systemMessage>>();
+                                break;
+                        case frame::Type::LIDAR:
+                                stream = std::make_unique<xqueue::Queue<frame::LidarPoint>>();
+                                break;
+                        case frame::Type::IMU:
+                                stream = std::make_unique<xqueue::Queue<frame::Imu>>();
+                                break;
+                        case frame::Type::ENCODER:
+                                stream = std::make_unique<xqueue::Queue<frame::Encoder>>();
+                                break;
+                        default:
+                                continue;
+                }
+
+                streams.try_emplace(type, std::move(stream));
+        }
+
+        return streams;
+}
+
+} // namespace
 
 // TODO: low priority constructor injection　のほうがわかりやすいかも
 Manager::Manager(const std::string file)
     : port(file),
       frameStreams(std::make_unique<std::map<frame::Type, xqueue::Queue<frame::Frame>>>()),
-      dataStreams(DataStreams()), transmitter(), receiverWorker(), parsers(), distributors()
+      dataStreams(makeDataStreams()), transmitter(), receiverWorker(), parsers(), distributors()
 {
         // prepare transmitter
         this->transmitter = std::make_unique<transmitter::Transmitter>(this->port);
@@ -106,35 +144,63 @@ std::expected<void, Error> Manager::initParsers(
         std::map<frame::Type, xqueue::Queue<frame::Frame>>& frameStreams,
         DataStreams&                                        streams)
 {
-        for (auto type : frame::TYPES)
-                if (auto [it, success] = parsers.try_emplace(type); !success)
+        for (auto type : frame::TYPES) {
+                auto frameStream = frameStreams.find(type);
+                if (frameStream == frameStreams.end())
                         return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
 
-        frame::Type type;
+                ParserWorker worker;
 
-        type                   = frame::Type::SYSTEM;
-        parsers[type].instance = std::make_unique<parser::Parser<frame::systemMessage>>(
-                type,
-                frameStreams[type],
-                *streams.system);
+                switch (type) {
+                        case frame::Type::SYSTEM: {
+                                auto* stream = findDataStream<frame::systemMessage>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+                                worker.instance =
+                                        std::make_unique<parser::Parser<frame::systemMessage>>(
+                                                type,
+                                                frameStream->second,
+                                                *stream);
+                                break;
+                        }
+                        case frame::Type::LIDAR: {
+                                auto* stream = findDataStream<frame::LidarPoint>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+                                worker.instance =
+                                        std::make_unique<parser::Parser<frame::LidarPoint>>(
+                                                type,
+                                                frameStream->second,
+                                                *stream);
+                                break;
+                        }
+                        case frame::Type::IMU: {
+                                auto* stream = findDataStream<frame::Imu>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+                                worker.instance = std::make_unique<parser::Parser<frame::Imu>>(
+                                        type,
+                                        frameStream->second,
+                                        *stream);
+                                break;
+                        }
+                        case frame::Type::ENCODER: {
+                                auto* stream = findDataStream<frame::Encoder>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+                                worker.instance = std::make_unique<parser::Parser<frame::Encoder>>(
+                                        type,
+                                        frameStream->second,
+                                        *stream);
+                                break;
+                        }
+                        default:
+                                return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+                }
 
-        type                   = frame::Type::LIDAR;
-        parsers[type].instance = std::make_unique<parser::Parser<frame::LidarPoint>>(
-                type,
-                frameStreams[type],
-                *streams.lidar);
-
-        type                   = frame::Type::IMU;
-        parsers[type].instance = std::make_unique<parser::Parser<frame::Imu>>(
-                type,
-                frameStreams[type],
-                *streams.imu);
-
-        type                   = frame::Type::ENCODER;
-        parsers[type].instance = std::make_unique<parser::Parser<frame::Encoder>>(
-                type,
-                frameStreams[type],
-                *streams.encoder);
+                if (!parsers.try_emplace(type, std::move(worker)).second)
+                        return std::unexpected<Error>(Error::PARSER_INIT_FAILED);
+        }
 
         return {};
 }
@@ -144,28 +210,61 @@ std::expected<void, Error> Manager::initDistributors(
         DataStreams&                              streams,
         transmitter::Transmitter&                 transmitter)
 {
+        for (auto type : frame::TYPES) {
+                DistributorWorker worker;
 
-        for (auto type : frame::TYPES)
-                if (auto [it, success] = distributors.try_emplace(type); !success)
+                switch (type) {
+                        case frame::Type::SYSTEM: {
+                                auto* stream = findDataStream<frame::systemMessage>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(
+                                                Error::DISTRIBUTOR_INIT_FAILED);
+                                worker.instance = std::make_unique<distributor::DeviceController>(
+                                        type,
+                                        transmitter,
+                                        *stream);
+                                break;
+                        }
+                        case frame::Type::LIDAR: {
+                                auto* stream = findDataStream<frame::LidarPoint>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(
+                                                Error::DISTRIBUTOR_INIT_FAILED);
+                                worker.instance =
+                                        std::make_unique<distributor::Plotter<frame::LidarPoint>>(
+                                                type,
+                                                *stream);
+                                break;
+                        }
+                        case frame::Type::IMU: {
+                                auto* stream = findDataStream<frame::Imu>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(
+                                                Error::DISTRIBUTOR_INIT_FAILED);
+                                worker.instance =
+                                        std::make_unique<distributor::Plotter<frame::Imu>>(
+                                                type,
+                                                *stream);
+                                break;
+                        }
+                        case frame::Type::ENCODER: {
+                                auto* stream = findDataStream<frame::Encoder>(streams, type);
+                                if (!stream)
+                                        return std::unexpected<Error>(
+                                                Error::DISTRIBUTOR_INIT_FAILED);
+                                worker.instance =
+                                        std::make_unique<distributor::Plotter<frame::Encoder>>(
+                                                type,
+                                                *stream);
+                                break;
+                        }
+                        default:
+                                return std::unexpected<Error>(Error::DISTRIBUTOR_INIT_FAILED);
+                }
+
+                if (!distributors.try_emplace(type, std::move(worker)).second)
                         return std::unexpected<Error>(Error::DISTRIBUTOR_INIT_FAILED);
-
-        frame::Type type;
-
-        type = frame::Type::SYSTEM;
-        distributors[type].instance =
-                std::make_unique<distributor::DeviceController>(type, transmitter, *streams.system);
-
-        type = frame::Type::LIDAR;
-        distributors[type].instance =
-                std::make_unique<distributor::Plotter<frame::LidarPoint>>(type, *streams.lidar);
-
-        type = frame::Type::IMU;
-        distributors[type].instance =
-                std::make_unique<distributor::Plotter<frame::Imu>>(type, *streams.imu);
-
-        type = frame::Type::ENCODER;
-        distributors[type].instance =
-                std::make_unique<distributor::Plotter<frame::Encoder>>(type, *streams.encoder);
+        }
 
         return {};
 }
