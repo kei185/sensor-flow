@@ -31,19 +31,8 @@ classDiagram
     }
 
     class DataStreams {
-        <<map Type to unique_ptr QueueBase>>
-    }
-
-    class QueueBase {
-        <<abstract>>
-        +empty() bool*
-    }
-
-    class Queue_T {
-        <<template T>>
-        +empty() bool
-        +push(T)
-        +pop() T
+        +unique_ptr~queue_systemMessage~ system
+        +unique_ptr~queue_LidarPoint~ lidar
     }
 
     class Receiver {
@@ -93,8 +82,6 @@ classDiagram
     }
 
     Manager *-- DataStreams : owns
-    DataStreams *-- QueueBase : owns queues by Type
-    QueueBase <|-- Queue_T
     Manager *-- Worker_T : owns workers
     Manager *-- Transmitter : owns
     Worker_T *-- Receiver : ReceiverWorker
@@ -118,18 +105,6 @@ using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_INIT_FAILED
 using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_INIT_FAILED>;
 using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_INIT_FAILED>;
 ```
-
-`DataStreams` is a `std::map<frame::Type, std::unique_ptr<xqueue::QueueBase>>`.
-`Manager::initDataStreams()` registers SYSTEM, LIDAR, and IMU queues with their
-respective `systemMessage`, `LidarPoint`, and `Imu` payload types. `QueueBase`
-provides a virtual destructor and an `empty()` query; push and pop operations
-remain typed on `Queue<T>`.
-
-Parser and distributor initialization checks each map entry with `dynamic_cast`
-before borrowing its typed queue. Missing entries, null queues, or incorrect
-payload types return `PARSER_INIT_FAILED` or `DISTRIBUTOR_INIT_FAILED` before
-workers are registered. Both workers borrow the same queue owned by the map;
-entries must remain alive while the workers use them.
 
 ## Data Flow
 
@@ -202,5 +177,5 @@ sequenceDiagram
 
 - The queues are accessed from multiple threads, but `std::queue` is not thread-safe. A synchronized queue abstraction is still required.
 - Empty queues are polled continuously, creating busy-wait loops. A condition variable or blocking queue would avoid unnecessary CPU use.
-- `DataStreams` owns its heterogeneous queues through `unique_ptr<QueueBase>`. Queue addresses remain stable while parsers and distributors borrow them; queues must not be erased or replaced while workers are using them.
+- `frameStreams` and the queues inside `DataStreams` are heap-allocated even though `Manager` has sole ownership. They could be stored directly unless stable indirection is required.
 - Initialization is listed explicitly for every frame type. This is verbose, but keeps the mapping between frame type, parsed data type, and distributor visible.
