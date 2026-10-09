@@ -7,11 +7,9 @@
 #include "worker/distributor.hpp"
 #include "worker/parser.hpp"
 #include "worker/processor.hpp"
-#include "worker/receiver.hpp"
 
 #include <expected>
 #include <memory>
-#include <stop_token>
 #include <thread>
 
 namespace worker
