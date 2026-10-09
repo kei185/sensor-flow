@@ -1,12 +1,14 @@
 
 #pragma once
 
+#include <source_location>
+#include <string>
 #include <string_view>
 
 namespace error
 {
 
-enum class Error
+enum class ErrorCode
 {
         OPEN_FILE_FAILED,
         CLOSE_FILE_FAILED,
@@ -22,37 +24,49 @@ enum class Error
         INVALID_CRC,
 };
 
-constexpr std::string_view toString(Error error)
+struct Error
 {
-        switch (error) {
-                case Error::OPEN_FILE_FAILED:
+        ErrorCode            code;
+        std::source_location location;
+};
+
+Error makeError(
+        ErrorCode,
+        std::source_location location = std::source_location::current()) noexcept;
+
+constexpr std::string_view toString(ErrorCode code)
+{
+        switch (code) {
+                case ErrorCode::OPEN_FILE_FAILED:
                         return "OPEN_FILE_FAILED";
-                case Error::CLOSE_FILE_FAILED:
+                case ErrorCode::CLOSE_FILE_FAILED:
                         return "CLOSE_FILE_FAILED";
-                case Error::RECEIVER_INIT_FAILED:
+                case ErrorCode::RECEIVER_INIT_FAILED:
                         return "RECEIVER_INIT_FAILED";
-                case Error::PARSER_INIT_FAILED:
+                case ErrorCode::PARSER_INIT_FAILED:
                         return "PARSER_INIT_FAILED";
-                case Error::DISTRIBUTOR_INIT_FAILED:
+                case ErrorCode::DISTRIBUTOR_INIT_FAILED:
                         return "DISTRIBUTOR_INIT_FAILED";
-                case Error::WORKER_DISPATCH_FAILED:
+                case ErrorCode::WORKER_DISPATCH_FAILED:
                         return "WORKER_DISPATCH_FAILED";
-                case Error::FILE_INTERNAL_ERROR:
+                case ErrorCode::FILE_INTERNAL_ERROR:
                         return "FILE_INTERNAL_ERROR";
-                case Error::IO_READ_FAILED:
+                case ErrorCode::IO_READ_FAILED:
                         return "IO_READ_FAILED";
-                case Error::IO_WRITE_FAILED:
+                case ErrorCode::IO_WRITE_FAILED:
                         return "IO_WRITE_FAILED";
-                case Error::THREAD_ABORTED:
+                case ErrorCode::THREAD_ABORTED:
                         return "THREAD_ABORTED";
-                case Error::OPERATION_TIMEOUT:
+                case ErrorCode::OPERATION_TIMEOUT:
                         return "OPERATION_TIMEOUT";
-                case Error::INVALID_CRC:
+                case ErrorCode::INVALID_CRC:
                         return "INVALID_CRC";
 
                 default:
                         return "UNKNOWN";
         }
 }
+
+std::string toString(const Error&);
 
 } // namespace error

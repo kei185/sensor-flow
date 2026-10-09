@@ -83,7 +83,7 @@ std::expected<void, error::Error> Port::readRaw(std::span<uint8_t> bytes)
                         continue;
                 }
 
-                return std::unexpected(error::Error::IO_READ_FAILED);
+                return std::unexpected(error::makeError(error::ErrorCode::IO_READ_FAILED));
         }
 
         return {};
@@ -104,11 +104,11 @@ std::expected<void, error::Error> Port::writeRaw(std::span<const uint8_t> bytes)
                         continue;
                 }
 
-                return std::unexpected(error::Error::IO_WRITE_FAILED);
+                return std::unexpected(error::makeError(error::ErrorCode::IO_WRITE_FAILED));
         }
 
         // if (fsync(this->fd) < 0)
-        //         return std::unexpected(error::Error::IO_WRITE_FAILED);
+        //         return std::unexpected(error::makeError(error::ErrorCode::IO_WRITE_FAILED));
 
         return {};
 }
