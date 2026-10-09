@@ -16,11 +16,10 @@ std::expected<std::unique_ptr<manager::Manager>, error::Error> init(const std::s
         auto dataStreams  = std::make_unique<manager::DataStreams>();
         auto transmitter  = std::make_unique<transmitter::Transmitter>(*port);
 
-        worker::ReceiverWorker receiver;
-        receiver.instance = std::make_unique<receiver::Receiver>(*port, *frameStreams);
+        worker::Worker receiver(std::make_unique<receiver::Receiver>(*port, *frameStreams));
 
-        std::map<frame::Type, worker::ParserWorker>      parsers;
-        std::map<frame::Type, worker::DistributorWorker> distributors;
+        std::map<frame::Type, worker::Worker> parsers;
+        std::map<frame::Type, worker::Worker> distributors;
 
         auto type = frame::Type::SYSTEM;
         frameStreams->try_emplace(type, std::make_unique<xqueue::Queue<frame::Frame>>());

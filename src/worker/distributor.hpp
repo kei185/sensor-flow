@@ -3,6 +3,7 @@
 #include "core/frame.hpp"
 #include "core/xqueue.hpp"
 #include "core/transmitter.hpp"
+#include "worker/processor.hpp"
 
 #include <stop_token>
 
@@ -12,13 +13,7 @@
 namespace distributor
 {
 
-struct Distributor
-{
-        virtual void run(std::stop_token) = 0;
-        virtual ~Distributor()            = default;
-};
-
-struct DeviceController : Distributor
+struct DeviceController : processor::Processor
 {
         frame::Type                          type;
         transmitter::Transmitter&            transmitter;
@@ -32,7 +27,7 @@ struct DeviceController : Distributor
                 xqueue::Queue<frame::systemMessage>&);
 };
 
-template <typename T> struct Plotter : Distributor
+template <typename T> struct Plotter : processor::Processor
 {
         frame::Type       type;
         xqueue::Queue<T>& inQueue;

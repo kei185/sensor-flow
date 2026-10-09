@@ -3,19 +3,14 @@
 #include "core/frame.hpp"
 #include "core/xqueue.hpp"
 #include "utility/logger.hpp"
+#include "worker/processor.hpp"
 
 #include <stop_token>
 #include <vector>
 
 namespace parser
 {
-struct ParserBase
-{
-        virtual void run(std::stop_token) = 0;
-        virtual ~ParserBase()             = default;
-};
-
-template <typename T> struct Parser : public ParserBase
+template <typename T> struct Parser : processor::Processor
 {
         frame::Type                  type;
         xqueue::Queue<frame::Frame>& inQueue;

@@ -4,6 +4,7 @@
 #include "core/io.hpp"
 #include "core/xqueue.hpp"
 #include "utility/error.hpp"
+#include "worker/processor.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -21,14 +22,14 @@ using namespace error;
 namespace receiver
 {
 
-struct Receiver
+struct Receiver : processor::Processor
 {
         io::Port&                                                            port;
         std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>& frameStreams;
 
         Receiver(io::Port&, std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>&);
 
-        void run(std::stop_token);
+        void run(std::stop_token) override;
 
         static std::expected<bool, Error>               findSOF(std::stop_token&, io::Port&);
         static std::expected<frame::FrameHeader, Error> getFrameHeader(io::Port&);

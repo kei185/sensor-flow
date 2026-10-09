@@ -28,17 +28,17 @@ struct Manager
 
         std::unique_ptr<transmitter::Transmitter> transmitter;
 
-        worker::ReceiverWorker                           receiverWorker;
-        std::map<frame::Type, worker::ParserWorker>      parsers;
-        std::map<frame::Type, worker::DistributorWorker> distributors;
+        worker::Worker                        receiverWorker;
+        std::map<frame::Type, worker::Worker> parsers;
+        std::map<frame::Type, worker::Worker> distributors;
 
         Manager(std::unique_ptr<io::Port>,
                 std::unique_ptr<FrameStreams>,
                 std::unique_ptr<DataStreams>,
                 std::unique_ptr<transmitter::Transmitter>,
-                worker::ReceiverWorker,
-                std::map<frame::Type, worker::ParserWorker>,
-                std::map<frame::Type, worker::DistributorWorker>);
+                worker::Worker,
+                std::map<frame::Type, worker::Worker>,
+                std::map<frame::Type, worker::Worker>);
         ~Manager();
         std::expected<void, Error> run();
 };

@@ -198,7 +198,7 @@ The transformation itself can remain a function object in both models. In the co
 The current application does not use a `DataChannel` abstraction. Instead, `Manager` owns the typed queues and connects independently managed workers:
 
 ```text
-Frame queue -> ParserWorker -> Data queue -> DistributorWorker
+Frame queue -> Worker (Parser) -> Data queue -> Worker (Distributor)
 ```
 
 A future pipeline abstraction could replace a single parser when a data path requires several consecutive transformations:
@@ -210,7 +210,7 @@ using LidarPipeline = Pipeline<
     NoiseFilter>;
 ```
 
-The pipeline would remain a component managed by `Worker<Pipeline, InitError>`:
+The pipeline would implement `processor::Processor` and remain an instance managed by `worker::Worker`:
 
 ```mermaid
 flowchart TB
@@ -219,7 +219,7 @@ flowchart TB
     worker[Worker of Pipeline]
     pipeline[Typed transformation pipeline]
     output[Typed output queue]
-    distributor[DistributorWorker]
+    distributor[Worker of Distributor]
 
     manager -->|owns| input
     manager -->|owns| worker
@@ -261,7 +261,7 @@ Use compile-time pipelines unless runtime reconfiguration is an explicit require
 1. Represent each transformation as a small function object with `Input`, `Output`, and `operator()`.
 2. Store the ordered stage objects in a `std::tuple`.
 3. Validate every adjacent input/output pair at compile time.
-4. Let `Manager` own the external queues and let `Worker<Pipeline, InitError>` own pipeline execution.
+4. Let `Manager` own the external queues and let `worker::Worker` own pipeline execution through `processor::Processor`.
 5. Begin with one worker per complete pipeline; introduce intermediate queues only when measurement shows that independent stage execution is useful.
 
 This design keeps routing, transformation, and execution as separate concerns while preserving static type safety.

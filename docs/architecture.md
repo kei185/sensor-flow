@@ -14,17 +14,14 @@ classDiagram
         -map~Type, queue_Frame~ frameStreams
         -DataStreams dataStreams
         -unique_ptr~Transmitter~ transmitter
-        -ReceiverWorker receiverWorker
-        -map~Type, ParserWorker~ parsers
-        -map~Type, DistributorWorker~ distributors
+        -Worker receiverWorker
+        -map~Type, Worker~ parsers
+        -map~Type, Worker~ distributors
         +run() expected~void, Error~
-        -initParsers(...)
-        -initDistributors(...)
     }
 
-    class Worker_T {
-        <<template Component>>
-        +unique_ptr~Component~ component
+    class Worker {
+        +unique_ptr~Processor~ instance
         +jthread thread
         +dispatch() expected~void, Error~
         +abort() expected~void, Error~
@@ -41,7 +38,7 @@ classDiagram
         +run(stop_token)
     }
 
-    class ParserBase {
+    class Processor {
         <<abstract>>
         +run(stop_token)*
     }
@@ -53,11 +50,6 @@ classDiagram
         +queue_T& outQueue
         +run(stop_token)
         +parsePayload(Frame&) vector_T
-    }
-
-    class Distributor {
-        <<abstract>>
-        +run(stop_token)*
     }
 
     class DeviceController {
@@ -82,14 +74,13 @@ classDiagram
     }
 
     Manager *-- DataStreams : owns
-    Manager *-- Worker_T : owns workers
+    Manager *-- Worker : owns workers
     Manager *-- Transmitter : owns
-    Worker_T *-- Receiver : ReceiverWorker
-    Worker_T *-- ParserBase : ParserWorker
-    Worker_T *-- Distributor : DistributorWorker
-    ParserBase <|-- Parser_T
-    Distributor <|-- DeviceController
-    Distributor <|-- Plotter_T
+    Worker *-- Processor : owns instance
+    Processor <|-- Receiver
+    Processor <|-- Parser_T
+    Processor <|-- DeviceController
+    Processor <|-- Plotter_T
     Receiver --> Manager : borrows port and frame queues
     Parser_T --> Manager : borrows typed queues
     DeviceController --> Transmitter : borrows
@@ -98,12 +89,12 @@ classDiagram
     Transmitter --> Manager : borrows port
 ```
 
-`Worker<Component, InitError>` owns one runnable component and its `std::jthread`. Every runnable component exposes `run(std::stop_token)`, allowing the worker to start any component without component-specific dispatch logic. `InitError` selects the error returned if the component is missing.
+`worker::Worker` owns one `processor::Processor` instance and its `std::jthread`. Receivers, parsers, and distributors inherit from `Processor` and implement `run(std::stop_token)`. The constructor accepts a `std::unique_ptr<Processor>`; `dispatch()` and `abort()` return `WORKER_DISPATCH_FAILED` if the instance is missing.
 
 ```cpp
-using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_INIT_FAILED>;
-using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_INIT_FAILED>;
-using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_INIT_FAILED>;
+worker::Worker receiver(std::make_unique<receiver::Receiver>(*port, *frameStreams));
+std::map<frame::Type, worker::Worker> parsers;
+std::map<frame::Type, worker::Worker> distributors;
 ```
 
 ## Data Flow
@@ -112,16 +103,16 @@ using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_IN
 flowchart LR
     source[Serial device]
     io[(Manager::port)]
-    receiver[ReceiverWorker]
+    receiver[Worker<br/>Receiver]
     frameType{Valid frame type}
     systemFrames[(SYSTEM Frame queue)]
     lidarFrames[(LIDAR Frame queue)]
-    systemParser[ParserWorker<br/>Parser of systemMessage]
-    lidarParser[ParserWorker<br/>Parser of LidarPoint]
+    systemParser[Worker<br/>Parser of systemMessage]
+    lidarParser[Worker<br/>Parser of LidarPoint]
     systemData[(systemMessage queue)]
     lidarData[(LidarPoint queue)]
-    controller[DistributorWorker<br/>DeviceController]
-    plotter[DistributorWorker<br/>Plotter of LidarPoint]
+    controller[Worker<br/>DeviceController]
+    plotter[Worker<br/>Plotter of LidarPoint]
     transmitter[Transmitter]
     output[Console or plot output]
 
@@ -150,24 +141,26 @@ The SYSTEM routing shown above is not implemented yet. `Receiver` currently uses
 %%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#1F2230", "primaryColor": "#303648", "primaryTextColor": "#E5E7EB", "primaryBorderColor": "#9CA3AF", "lineColor": "#E5E7EB", "textColor": "#E5E7EB", "actorLineColor": "#E5E7EB", "signalColor": "#E5E7EB", "signalTextColor": "#E5E7EB"}}}%%
 sequenceDiagram
     participant App
+    participant Init as application::init
+    participant ReceiverStage as Worker (Receiver)
+    participant ParserStages as Workers (Parser)
+    participant DistributorStages as Workers (Distributor)
     participant Manager
-    participant ReceiverWorker
-    participant ParserWorkers
-    participant DistributorWorkers
 
-    App->>Manager: Manager(file)
-    Manager->>Manager: create Transmitter
-    Manager->>Manager: create one Frame queue per Type
-    Manager->>ReceiverWorker: assign Receiver component
-    Manager->>ParserWorkers: initParsers()
-    Manager->>DistributorWorkers: initDistributors()
+    App->>Init: init(path)
+    Init->>Init: create Port, Transmitter, and queues
+    Init->>ReceiverStage: Worker(make_unique of Receiver)
+    Init->>ParserStages: worker(type, frame queue, data queue)
+    Init->>DistributorStages: worker(type, data queue, ...)
+    Init->>Manager: inject resources and workers
+    Init-->>App: unique_ptr of Manager
     App->>Manager: run()
-    Manager->>ReceiverWorker: dispatch()
-    Manager->>ParserWorkers: dispatch() each worker
-    Manager->>DistributorWorkers: dispatch() each worker
+    Manager->>ReceiverStage: dispatch()
+    Manager->>ParserStages: dispatch() each worker
+    Manager->>DistributorStages: dispatch() each worker
 ```
 
-`initParsers()` and `initDistributors()` construct components and assign them to workers. Threads are started later by `Manager::run()` through `Worker::dispatch()`.
+`application::init()` constructs processors and workers, then passes the resources and workers into `Manager` through its constructor. Threads are started later by `Manager::run()` through `Worker::dispatch()`.
 
 ## Shutdown
 
