@@ -26,7 +26,9 @@ using namespace error;
 namespace receiver
 {
 
-Receiver::Receiver(io::Port& port, std::map<frame::Type, xqueue::Queue<frame::Frame>>& frameStreams)
+Receiver::Receiver(
+        io::Port&                                                            port,
+        std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>& frameStreams)
     : port(port), frameStreams(frameStreams)
 {}
 
@@ -58,7 +60,7 @@ void Receiver::run(std::stop_token st)
                 if (type == frame::Type::UNKNOWN)
                         continue;
 
-                this->frameStreams[type].push(std::move(fr));
+                this->frameStreams.at(type)->push(std::move(fr));
         }
 
         return;

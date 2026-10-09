@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <format>
 #include <numbers>
 #include <print>
@@ -10,7 +11,7 @@
 #include <functional>
 
 #include "utility/logger.hpp"
-#include "manager.hpp"
+#include "application.hpp"
 
 // double I(std::function<double(double)> f, std::vector<double> x)
 // {
@@ -37,18 +38,26 @@
 
 int main(int argc, char* argv[])
 {
-        std::string path = argv[1];
+        if (argc != 2 || argv[1][0] == '\0') {
+                std::println(stderr, "usage: {} <serial-device>", argv[0]);
+                return 1;
+        }
 
-        if (path.empty())
-                std::println("error: invalid arguments");
+        std::string path = argv[1];
 
         logger::log(std::format("RECEIVED ARGS [{}]", path));
 
-        manager::Manager application(path);
+        auto app = application::init(path);
+        if (!app) {
+                logger::log(app.error());
+                return 1;
+        }
 
-        auto result = application.run();
-        if (!result)
+        auto result = (*app)->run();
+        if (!result) {
                 logger::log(result.error());
+                return 1;
+        }
 }
 
 // #include <iostream>

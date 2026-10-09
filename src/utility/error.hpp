@@ -13,9 +13,7 @@ enum class Error
         RECEIVER_INIT_FAILED,
         PARSER_INIT_FAILED,
         DISTRIBUTOR_INIT_FAILED,
-        RECEIVER_DISPATCH_FAILED,
-        PARSER_DISPATCH_FAILED,
-        DISTRIBUTOR_DISPATCH_FAILED,
+        WORKER_DISPATCH_FAILED,
         FILE_INTERNAL_ERROR,
         IO_READ_FAILED,
         IO_WRITE_FAILED,
@@ -37,12 +35,8 @@ constexpr std::string_view toString(Error error)
                         return "PARSER_INIT_FAILED";
                 case Error::DISTRIBUTOR_INIT_FAILED:
                         return "DISTRIBUTOR_INIT_FAILED";
-                case Error::RECEIVER_DISPATCH_FAILED:
-                        return "RECEIVER_DISPATCH_FAILED";
-                case Error::PARSER_DISPATCH_FAILED:
-                        return "PARSER_DISPATCH_FAILED";
-                case Error::DISTRIBUTOR_DISPATCH_FAILED:
-                        return "DISTRIBUTOR_DISPATCH_FAILED";
+                case Error::WORKER_DISPATCH_FAILED:
+                        return "WORKER_DISPATCH_FAILED";
                 case Error::FILE_INTERNAL_ERROR:
                         return "FILE_INTERNAL_ERROR";
                 case Error::IO_READ_FAILED:

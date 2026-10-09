@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <expected>
 #include <map>
+#include <memory>
 #include <span>
 #include <stop_token>
 
@@ -22,10 +23,10 @@ namespace receiver
 
 struct Receiver
 {
-        io::Port&                                           port;
-        std::map<frame::Type, xqueue::Queue<frame::Frame>>& frameStreams;
+        io::Port&                                                            port;
+        std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>& frameStreams;
 
-        Receiver(io::Port&, std::map<frame::Type, xqueue::Queue<frame::Frame>>&);
+        Receiver(io::Port&, std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>&);
 
         void run(std::stop_token);
 

@@ -10,6 +10,7 @@ project(sf LANGUAGES CXX)
 
 file(
     GLOB SRC
+    src/application.cpp
     src/manager.cpp
     src/core/*.cpp
     src/demo/*.cpp

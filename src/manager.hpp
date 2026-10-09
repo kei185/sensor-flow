@@ -5,91 +5,42 @@
 #include "core/xqueue.hpp"
 #include "core/transmitter.hpp"
 #include "utility/error.hpp"
-#include "worker/distributor.hpp"
-#include "worker/parser.hpp"
-#include "worker/receiver.hpp"
+#include "worker/worker.hpp"
 
-#include <cstddef>
-#include <cstdlib>
 #include <expected>
 #include <map>
 #include <memory>
-#include <thread>
-
-#include <unistd.h>
 
 using namespace error;
 
 namespace manager
 {
 
-template <typename T, Error InitError> struct Worker
-{
-        std::unique_ptr<T> instance;
-        std::jthread       thread;
-
-        std::expected<void, Error> dispatch()
-        {
-                if (!this->instance)
-                        return std::unexpected<Error>(InitError);
-
-                this->thread = std::jthread([component = this->instance.get()](std::stop_token st) {
-                        component->run(st);
-                });
-
-                return {};
-        }
-
-        std::expected<void, Error> abort()
-        {
-                if (!this->instance)
-                        return std::unexpected<Error>(InitError);
-
-                this->thread.request_stop();
-
-                return {};
-        }
-};
-
-using ReceiverWorker    = Worker<receiver::Receiver, Error::RECEIVER_DISPATCH_FAILED>;
-using ParserWorker      = Worker<parser::ParserBase, Error::PARSER_DISPATCH_FAILED>;
-using DistributorWorker = Worker<distributor::Distributor, Error::DISTRIBUTOR_DISPATCH_FAILED>;
-
-struct DataStreams
-{
-        std::unique_ptr<xqueue::Queue<frame::systemMessage>> system;
-        std::unique_ptr<xqueue::Queue<frame::LidarPoint>>    lidar;
-        std::unique_ptr<xqueue::Queue<frame::Imu>>           imu;
-        std::unique_ptr<xqueue::Queue<frame::Encoder>>       encoder;
-
-        DataStreams();
-};
+using FrameStreams = std::map<frame::Type, std::unique_ptr<xqueue::Queue<frame::Frame>>>;
+using DataStreams  = std::map<frame::Type, std::unique_ptr<xqueue::QueueBase>>;
 
 struct Manager
 {
-        io::Port port;
+        std::unique_ptr<io::Port> port;
 
-        std::unique_ptr<std::map<frame::Type, xqueue::Queue<frame::Frame>>> frameStreams;
-        DataStreams                                                         dataStreams;
+        std::unique_ptr<FrameStreams> frameStreams;
+        std::unique_ptr<DataStreams>  dataStreams;
 
         std::unique_ptr<transmitter::Transmitter> transmitter;
-        ReceiverWorker                            receiverWorker;
-        std::map<frame::Type, ParserWorker>       parsers;
-        std::map<frame::Type, DistributorWorker>  distributors;
 
-        Manager(const std::string);
+        worker::ReceiverWorker                           receiverWorker;
+        std::map<frame::Type, worker::ParserWorker>      parsers;
+        std::map<frame::Type, worker::DistributorWorker> distributors;
+
+        Manager(std::unique_ptr<io::Port>,
+                std::unique_ptr<FrameStreams>,
+                std::unique_ptr<DataStreams>,
+                std::unique_ptr<transmitter::Transmitter>,
+                worker::ReceiverWorker,
+                std::map<frame::Type, worker::ParserWorker>,
+                std::map<frame::Type, worker::DistributorWorker>);
         ~Manager();
         std::expected<void, Error> run();
-
-        static std::expected<void, Error> initParsers(
-                std::map<frame::Type, ParserWorker>&,
-                std::map<frame::Type, xqueue::Queue<frame::Frame>>&,
-                DataStreams&);
-
-        static std::expected<void, Error> initDistributors(
-                std::map<frame::Type, DistributorWorker>&,
-                DataStreams&,
-                transmitter::Transmitter&);
 };
 
 } // namespace manager
