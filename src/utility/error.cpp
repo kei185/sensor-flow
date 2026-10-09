@@ -6,7 +6,7 @@
 namespace error
 {
 
-Error makeError(ErrorCode code, std::source_location location) noexcept { return {code, location}; }
+Error makeError(Code code, std::source_location location) noexcept { return {code, location}; }
 
 std::string toString(const Error& error)
 {

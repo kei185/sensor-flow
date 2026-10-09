@@ -8,7 +8,7 @@
 namespace error
 {
 
-enum class ErrorCode
+enum class Code
 {
         OPEN_FILE_FAILED,
         CLOSE_FILE_FAILED,
@@ -26,40 +26,38 @@ enum class ErrorCode
 
 struct Error
 {
-        ErrorCode            code;
+        Code                 code;
         std::source_location location;
 };
 
-Error makeError(
-        ErrorCode,
-        std::source_location location = std::source_location::current()) noexcept;
+Error makeError(Code, std::source_location location = std::source_location::current()) noexcept;
 
-constexpr std::string_view toString(ErrorCode code)
+constexpr std::string_view toString(Code code)
 {
         switch (code) {
-                case ErrorCode::OPEN_FILE_FAILED:
+                case Code::OPEN_FILE_FAILED:
                         return "OPEN_FILE_FAILED";
-                case ErrorCode::CLOSE_FILE_FAILED:
+                case Code::CLOSE_FILE_FAILED:
                         return "CLOSE_FILE_FAILED";
-                case ErrorCode::RECEIVER_INIT_FAILED:
+                case Code::RECEIVER_INIT_FAILED:
                         return "RECEIVER_INIT_FAILED";
-                case ErrorCode::PARSER_INIT_FAILED:
+                case Code::PARSER_INIT_FAILED:
                         return "PARSER_INIT_FAILED";
-                case ErrorCode::DISTRIBUTOR_INIT_FAILED:
+                case Code::DISTRIBUTOR_INIT_FAILED:
                         return "DISTRIBUTOR_INIT_FAILED";
-                case ErrorCode::WORKER_DISPATCH_FAILED:
+                case Code::WORKER_DISPATCH_FAILED:
                         return "WORKER_DISPATCH_FAILED";
-                case ErrorCode::FILE_INTERNAL_ERROR:
+                case Code::FILE_INTERNAL_ERROR:
                         return "FILE_INTERNAL_ERROR";
-                case ErrorCode::IO_READ_FAILED:
+                case Code::IO_READ_FAILED:
                         return "IO_READ_FAILED";
-                case ErrorCode::IO_WRITE_FAILED:
+                case Code::IO_WRITE_FAILED:
                         return "IO_WRITE_FAILED";
-                case ErrorCode::THREAD_ABORTED:
+                case Code::THREAD_ABORTED:
                         return "THREAD_ABORTED";
-                case ErrorCode::OPERATION_TIMEOUT:
+                case Code::OPERATION_TIMEOUT:
                         return "OPERATION_TIMEOUT";
-                case ErrorCode::INVALID_CRC:
+                case Code::INVALID_CRC:
                         return "INVALID_CRC";
 
                 default:

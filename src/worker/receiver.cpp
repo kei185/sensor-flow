@@ -46,7 +46,7 @@ void Receiver::run(std::stop_token st)
                 // read frame header
                 frh = this->getFrameHeader(this->port);
                 if (!frh.has_value()) {
-                        if (frh.error().code == error::ErrorCode::INVALID_CRC)
+                        if (frh.error().code == error::Code::INVALID_CRC)
                                 continue;
                         else
                                 abortByError(frh.error());
@@ -99,7 +99,7 @@ std::expected<frame::FrameHeader, Error> Receiver::getFrameHeader(io::Port& port
                 return std::unexpected<Error>(result.error());
 
         if (!Receiver::isValidCRC(rawHeader))
-                return std::unexpected(error::makeError(error::ErrorCode::INVALID_CRC));
+                return std::unexpected(error::makeError(error::Code::INVALID_CRC));
 
         // TODO: low priority fix hard code
         frame::FrameHeader frh = {
