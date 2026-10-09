@@ -16,9 +16,9 @@ log(std::string_view message, std::source_location location = std::source_locati
         std::println("[{}] {}: {}", std::this_thread::get_id(), location.function_name(), message);
 }
 
-inline void log(error::Error err, std::source_location location = std::source_location::current())
+inline void log(const error::Error& err)
 {
-        log(error::toString(err), location);
+        std::println("[{}] {}", std::this_thread::get_id(), error::toString(err));
 }
 
 } // namespace logger

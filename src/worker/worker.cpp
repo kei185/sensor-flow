@@ -10,7 +10,7 @@ Worker::Worker(std::unique_ptr<processor::Processor> instance) : instance(std::m
 std::expected<void, error::Error> Worker::dispatch()
 {
         if (!this->instance)
-                return std::unexpected<error::Error>(error::Error::WORKER_DISPATCH_FAILED);
+                return std::unexpected(error::makeError(error::ErrorCode::WORKER_DISPATCH_FAILED));
 
         this->thread = std::jthread(
                 [component = this->instance.get()](std::stop_token st) { component->run(st); });
@@ -21,7 +21,7 @@ std::expected<void, error::Error> Worker::dispatch()
 std::expected<void, error::Error> Worker::abort()
 {
         if (!this->instance)
-                return std::unexpected<error::Error>(error::Error::WORKER_DISPATCH_FAILED);
+                return std::unexpected(error::makeError(error::ErrorCode::WORKER_DISPATCH_FAILED));
 
         this->thread.request_stop();
 

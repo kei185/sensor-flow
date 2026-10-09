@@ -5,24 +5,18 @@
 
 #include <cstdlib>
 #include <expected>
-#include <source_location>
 #include <utility>
 
-[[noreturn]] inline void abortByError(
-        error::Error err,
-        std::source_location location = std::source_location::current())
+[[noreturn]] inline void abortByError(const error::Error& err)
 {
-        logger::log(err, location);
+        logger::log(err);
         std::exit(1);
 }
 
-template <typename T>
-T unwrap(
-        std::expected<T, error::Error> result,
-        std::source_location location = std::source_location::current())
+template <typename T> T unwrap(std::expected<T, error::Error> result)
 {
         if (!result)
-                abortByError(result.error(), location);
+                abortByError(result.error());
 
         return std::move(result).value();
 }

@@ -64,13 +64,14 @@ std::expected<void, error::Error> Transmitter::session(
         while (1) {
                 // check stop request
                 if (st.stop_requested())
-                        return std::unexpected(error::Error::THREAD_ABORTED);
+                        return std::unexpected(error::makeError(error::ErrorCode::THREAD_ABORTED));
 
                 // check buffer
                 if (mQueue.empty()) {
                         // if timeout
                         if (std::chrono::steady_clock::now() >= deadline)
-                                return std::unexpected(error::Error::OPERATION_TIMEOUT);
+                                return std::unexpected(
+                                        error::makeError(error::ErrorCode::OPERATION_TIMEOUT));
 
                         continue;
                 }

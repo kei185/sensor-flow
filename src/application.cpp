@@ -1,5 +1,6 @@
 #include "application.hpp"
 #include "core/frame.hpp"
+#include "worker/receiver.hpp"
 #include "worker/worker.hpp"
 
 #include <map>
