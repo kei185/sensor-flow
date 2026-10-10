@@ -22,6 +22,7 @@ enum class Code
         THREAD_ABORTED,
         OPERATION_TIMEOUT,
         INVALID_CRC,
+        PROTOCOL_ERROR,
 };
 
 struct Error
@@ -59,6 +60,8 @@ constexpr std::string_view toString(Code code)
                         return "OPERATION_TIMEOUT";
                 case Code::INVALID_CRC:
                         return "INVALID_CRC";
+                case Code::PROTOCOL_ERROR:
+                        return "PROTOCOL_ERROR";
 
                 default:
                         return "UNKNOWN";

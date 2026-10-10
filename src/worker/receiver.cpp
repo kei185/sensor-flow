@@ -10,6 +10,7 @@
 #include <boost/crc.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -134,6 +135,10 @@ Receiver::getPayload(io::Port& port, const frame::FrameHeader& frh)
         auto result = port.readRaw(std::span<uint8_t>(fr.payload));
         if (!result.has_value())
                 return std::unexpected<Error>(result.error());
+
+        fr.receivedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
 
         return fr;
 }

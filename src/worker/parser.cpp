@@ -13,8 +13,9 @@ std::vector<frame::systemMessage> Parser<frame::systemMessage>::parsePayload(fra
 {
 
         return {{
-                .message = std::string(fr.payload.begin(), fr.payload.end()),
-                .type    = fr.type,
+                .timestamp = fr.receivedAt,
+                .message   = std::string(fr.payload.begin(), fr.payload.end()),
+                .type      = fr.type,
         }};
 }
 

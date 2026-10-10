@@ -188,6 +188,8 @@ struct Frame
         uint16_t             length;
         Type                 type;
         std::vector<uint8_t> payload;
+        // Host receive time in Unix milliseconds, independent of the MCU header tick.
+        uint64_t receivedAt = {};
 };
 using Crc     = uint8_t;
 using CrcData = uint16_t;
@@ -227,6 +229,7 @@ struct Encoder
 
 struct systemMessage
 {
+        uint64_t    timestamp = {};
         std::string message;
         Type        type;
 };

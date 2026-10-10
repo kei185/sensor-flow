@@ -5,6 +5,7 @@
 #include "core/xqueue.hpp"
 
 #include <expected>
+#include <chrono>
 #include <stop_token>
 
 namespace transmitter
@@ -19,11 +20,12 @@ struct Transmitter
 
         std::expected<void, error::Error> transmit(frame::OperationType, std::span<uint8_t> = {});
 
-        std::expected<void, error::Error>
+        std::expected<frame::systemMessage, error::Error>
         session(std::stop_token,
                 xqueue::Queue<frame::systemMessage>&,
                 frame::OperationType,
-                std::span<uint8_t> = {});
+                std::span<uint8_t>                = {},
+                std::chrono::milliseconds timeout = frame::OPERATION_TIMEOUT);
 };
 
 } // namespace transmitter
