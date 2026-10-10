@@ -4,7 +4,6 @@
 #include "core/io.hpp"
 #include "core/xqueue.hpp"
 #include "utility/logger.hpp"
-#include "utility/unwrap.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -56,7 +55,8 @@ std::expected<frame::systemMessage, error::Error> Transmitter::session(
         std::span<uint8_t>                   data)
 {
         // transmit
-        unwrap(this->transmit(type, data));
+        if (auto result = this->transmit(type, data); !result)
+                return std::unexpected(result.error());
 
         // set timeout
         const auto deadline = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
