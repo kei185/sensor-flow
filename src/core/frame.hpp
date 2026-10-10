@@ -23,12 +23,12 @@ extern const uint8_t                   START_OF_FRAME[];
  */
 enum class OperationType
 {
-        // WAIT_READY,
-        // GET_STATUS,
         START_SCAN,
-        // END_SCAN,
         START_TIME_SYNC,
         TIME,
+        HANDSHAKE,
+        SOFT_RESET,
+        MOTOR,
 };
 
 /**
@@ -39,18 +39,18 @@ extern const std::map<OperationType, std::array<uint8_t, 2>> OPERATION;
 constexpr std::string_view toString(OperationType type)
 {
         switch (type) {
-                // case OperationType::WAIT_READY:
-                //         return "WAIT_READY";
-                // case OperationType::GET_STATUS:
-                //         return "GET_STATUS";
                 case OperationType::START_SCAN:
                         return "START_SCAN";
-                // case OperationType::END_SCAN:
-                //         return "END_SCAN";
                 case OperationType::START_TIME_SYNC:
                         return "START_TIME_SYNC";
                 case OperationType::TIME:
                         return "TIME";
+                case OperationType::HANDSHAKE:
+                        return "HANDSHAKE";
+                case OperationType::SOFT_RESET:
+                        return "SOFT_RESET";
+                case OperationType::MOTOR:
+                        return "MOTOR";
                 default:
                         return "UNKNOWN";
         }
@@ -77,6 +77,9 @@ enum class Type : uint8_t
         START_TIME_SYNC_ACK = 0x0A,
         TIME_ACK            = 0x0B,
         TIME_REPORT         = 0x0C,
+        HANDSHAKE_ACK       = 0x0D,
+        MOTOR_ACK           = 0x0E,
+        SOFT_RESET_ACK      = 0x0F,
         UNKNOWN             = 0x10,
 };
 
@@ -91,6 +94,12 @@ constexpr Type toAckType(OperationType type)
                         return Type::START_TIME_SYNC_ACK;
                 case OperationType::TIME:
                         return Type::TIME_ACK;
+                case OperationType::HANDSHAKE:
+                        return Type::HANDSHAKE_ACK;
+                case OperationType::SOFT_RESET:
+                        return Type::SOFT_RESET_ACK;
+                case OperationType::MOTOR:
+                        return Type::MOTOR_ACK;
                 default:
                         return Type::UNKNOWN;
         }
@@ -125,6 +134,12 @@ constexpr std::string_view toString(Type type)
                         return "TIME_ACK";
                 case Type::TIME_REPORT:
                         return "TIME_REPORT";
+                case Type::HANDSHAKE_ACK:
+                        return "HANDSHAKE_ACK";
+                case Type::MOTOR_ACK:
+                        return "MOTOR_ACK";
+                case Type::SOFT_RESET_ACK:
+                        return "SOFT_RESET_ACK";
                 default:
                         return "UNKNOWN";
         }
@@ -149,6 +164,9 @@ constexpr Type frameQueueMUX(Type type)
                 case Type::START_TIME_SYNC_ACK:
                 case Type::TIME_ACK:
                 case Type::TIME_REPORT:
+                case Type::HANDSHAKE_ACK:
+                case Type::MOTOR_ACK:
+                case Type::SOFT_RESET_ACK:
                         return Type::SYSTEM;
 
                 default:
