@@ -227,6 +227,8 @@ struct Encoder
 
 struct systemMessage
 {
+
+        uint64_t    timestamp;
         std::string message;
         Type        type;
 };
