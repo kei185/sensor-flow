@@ -8,10 +8,8 @@
 
 #include <array>
 #include <chrono>
-#include <condition_variable>
 #include <expected>
 #include <iostream>
-#include <mutex>
 #include <print>
 #include <stop_token>
 #include <string>
@@ -19,31 +17,42 @@
 namespace protocol
 {
 
-static std::expected<void, error::Error>
+static std::expected<frame::systemMessage, error::Error>
 waitFor(std::stop_token, xqueue::Queue<frame::systemMessage>&, frame::Type);
+
+std::expected<frame::systemMessage, error::Error>
+timeSync(std::stop_token, transmitter::Transmitter&, xqueue::Queue<frame::systemMessage>&);
+
 void run(
         std::stop_token                      st,
         transmitter::Transmitter&            transmitter,
         xqueue::Queue<frame::systemMessage>& mQueue)
 {
         while (!st.stop_requested()) {
+                logger::log("PROTOCOL STARTED");
+
                 while (!mQueue.empty())
                         mQueue.pop();
 
-                const auto retryAt = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
-                auto handshake = transmitter.session(st, mQueue, frame::OperationType::HANDSHAKE);
-                if (!handshake) {
-                        logger::log(handshake.error());
-                        std::mutex                  mutex;
-                        std::condition_variable_any condition;
-                        std::unique_lock            lock(mutex);
-                        condition.wait_until(lock, st, retryAt, [] { return false; });
+                auto result = transmitter.session(st, mQueue, frame::OperationType::HANDSHAKE);
+                if (!result) {
+                        logger::log(result.error());
                         continue;
                 }
 
-                auto result = waitFor(st, mQueue, frame::Type::READY);
-                if (result)
-                        result = timSync(st, transmitter, mQueue);
+                result = waitFor(st, mQueue, frame::Type::READY);
+                if (!result) {
+                        logger::log(result.error());
+                        continue;
+                }
+
+                result = timeSync(st, transmitter, mQueue);
+                if (!result) {
+                        logger::log(result.error());
+                        continue;
+                }
+
+                result = waitFor(st, mQueue, frame::Type::TIME_REPORT);
                 if (!result) {
                         logger::log(result.error());
                         continue;
@@ -59,7 +68,7 @@ void run(
         }
 };
 
-static std::expected<void, error::Error>
+static std::expected<frame::systemMessage, error::Error>
 waitFor(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue, frame::Type type)
 {
         logger::log(std::format("WAITING FOR {}", frame::toString(type)));
@@ -85,11 +94,11 @@ waitFor(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue, frame::
                         return std::unexpected(error::makeError(error::Code::PROTOCOL_ERROR));
         } while (sm.type != type);
 
-        return {};
+        return sm;
 }
 
-std::expected<void, error::Error>
-timSync(std::stop_token                      st,
+std::expected<frame::systemMessage, error::Error> timeSync(
+        std::stop_token                      st,
         transmitter::Transmitter&            transmitter,
         xqueue::Queue<frame::systemMessage>& mQueue)
 {
@@ -114,7 +123,8 @@ timSync(std::stop_token                      st,
                 return std::unexpected(ack.error());
 
         logger::log("TIME SYNC DONE");
-        return {};
+
+        return ack;
 }
 
 } // namespace protocol
