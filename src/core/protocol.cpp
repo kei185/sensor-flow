@@ -92,8 +92,8 @@ waitForReady(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue)
         return {};
 }
 
-static std::expected<void, error::Error> timeSync(
-        std::stop_token                      st,
+std::expected<void, error::Error>
+timSync(std::stop_token                      st,
         transmitter::Transmitter&            transmitter,
         xqueue::Queue<frame::systemMessage>& mQueue)
 {
@@ -174,7 +174,7 @@ startup(std::stop_token                      st,
         result = waitForReady(st, mQueue);
         if (!result)
                 return result;
-        result = timeSync(st, transmitter, mQueue);
+        result = timSync(st, transmitter, mQueue);
         if (!result)
                 return result;
         result = waitForStart(st, mQueue);

@@ -18,6 +18,8 @@ namespace transmitter
 
 Transmitter::Transmitter(io::Port& port) : port(port) {}
 
+io::Port& Transmitter::borrow() { return this->port; }
+
 /**
  * Transmits a frame of the given type of operation.
  */

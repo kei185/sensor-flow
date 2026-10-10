@@ -18,6 +18,7 @@ struct Transmitter
       public:
         Transmitter(io::Port&);
 
+        io::Port&                         borrow();
         std::expected<void, error::Error> transmit(frame::OperationType, std::span<uint8_t> = {});
 
         std::expected<frame::systemMessage, error::Error>
