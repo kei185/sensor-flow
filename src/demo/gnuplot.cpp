@@ -6,12 +6,14 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <deque>
 #include <format>
+#include <memory>
+#include <mutex>
 #include <numbers>
 #include <string>
-#include <thread>
 
 namespace demo
 {
@@ -20,6 +22,54 @@ namespace
 constexpr size_t LIDAR_MAX_POINTS = 720;
 constexpr size_t IMU_MAX_POINTS   = 1000;
 constexpr auto   REDRAW_INTERVAL  = std::chrono::milliseconds(50);
+
+struct RedrawTimer
+{
+        std::mutex                            mutex;
+        std::condition_variable_any           condition;
+        std::chrono::steady_clock::time_point nextRedraw = std::chrono::steady_clock::now();
+
+        bool wait(std::stop_token st)
+        {
+                std::unique_lock lock(this->mutex);
+                this->condition.wait_until(lock, st, this->nextRedraw, [] { return false; });
+                if (st.stop_requested())
+                        return false;
+                this->nextRedraw = std::chrono::steady_clock::now() + REDRAW_INTERVAL;
+                return true;
+        }
+};
+
+template <typename T, typename Consume>
+bool readPlotBatch(std::stop_token st, xqueue::Queue<T>& queue, RedrawTimer& timer, Consume consume)
+{
+        if (!queue.waitData(st) || !timer.wait(st))
+                return false;
+
+        do {
+                if (st.stop_requested())
+                        return false;
+                consume(queue.pop());
+        } while (!queue.empty() && std::chrono::steady_clock::now() < timer.nextRedraw);
+
+        return !st.stop_requested();
+}
+
+void closeGnuplot(FILE* file) noexcept
+{
+        std::fputs("exit\n", file);
+        pclose(file);
+}
+
+auto openGnuplot()
+{
+        std::unique_ptr<FILE, decltype(&closeGnuplot)> process(
+                popen("gnuplot -persist", "w"),
+                closeGnuplot);
+        if (!process)
+                logger::log("OPEN PROCESS gnuplot FAILED");
+        return process;
+}
 
 constexpr double IMU_SAMPLE_RATE_HZ = 15.0;
 // The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
@@ -214,12 +264,13 @@ void configureImuTimeSeriesPlot(FILE* file)
 
 void run(std::stop_token st, xqueue::Queue<frame::LidarPoint>& inQueue)
 {
-        FILE* file = popen("gnuplot -persist", "w");
-
-        if (file == nullptr) {
-                logger::log("OPEN PROCESS gnuplot FAILED");
+        if (st.stop_requested())
                 return;
-        }
+
+        auto process = openGnuplot();
+        if (!process)
+                return;
+        FILE* file = process.get();
 
         std::fputs(
                 "set title 'LiDAR scan'\n"
@@ -233,33 +284,20 @@ void run(std::stop_token st, xqueue::Queue<frame::LidarPoint>& inQueue)
                 "set style line 1 linecolor rgb '#00AEEF' pointtype 7 pointsize 0.5\n",
                 file);
 
-        std::deque<frame::LidarPoint>         points;
-        std::chrono::steady_clock::time_point nextRedraw = std::chrono::steady_clock::now();
-        std::chrono::steady_clock::time_point now;
+        std::deque<frame::LidarPoint> points;
+        RedrawTimer                   timer;
 
-        while (!st.stop_requested()) {
-                if (inQueue.empty())
-                        continue;
-
-                points.push_back(inQueue.pop());
-
+        while (readPlotBatch(st, inQueue, timer, [&](frame::LidarPoint point) {
+                points.push_back(point);
                 if (points.size() > LIDAR_MAX_POINTS)
                         points.pop_front();
-
-                if ((now = std::chrono::steady_clock::now()) < nextRedraw)
-                        continue;
-
+        })) {
                 std::fputs("plot '-' using 1:2 with points linestyle 1\n", file);
                 for (const auto& point : points)
                         std::fprintf(file, "%s\n", toString(point).c_str());
                 std::fputs("e\n", file);
                 std::fflush(file);
-
-                nextRedraw = now + REDRAW_INTERVAL;
         }
-
-        std::fputs("exit\n", file);
-        pclose(file);
 }
 
 void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
@@ -267,39 +305,26 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
         if (st.stop_requested())
                 return;
 
-        FILE* file = popen("gnuplot -persist", "w");
-
-        if (file == nullptr) {
-                logger::log("OPEN PROCESS gnuplot FAILED");
+        auto process = openGnuplot();
+        if (!process)
                 return;
-        }
+        FILE* file = process.get();
 
         configureImuTimeSeriesPlot(file);
 
         std::deque<ImuSample> points;
-        const auto            start      = std::chrono::steady_clock::now();
-        auto                  nextRedraw = start;
-        bool                  dirty      = false;
+        const auto            start = std::chrono::steady_clock::now();
+        RedrawTimer           timer;
 
-        while (!st.stop_requested()) {
-                if (!inQueue.empty()) {
-                        auto value = inQueue.pop();
-                        // Imu has no device timestamp; use elapsed host time when dequeued.
-                        const double time = std::chrono::duration<double>(
-                                                    std::chrono::steady_clock::now() - start)
-                                                    .count();
-                        points.push_back({time, value});
-                        if (points.size() > IMU_MAX_POINTS)
-                                points.pop_front();
-                        dirty = true;
-                } else {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                }
-
-                const auto now = std::chrono::steady_clock::now();
-                if (!dirty || now < nextRedraw)
-                        continue;
-
+        while (readPlotBatch(st, inQueue, timer, [&](frame::Imu value) {
+                // Imu has no device timestamp; use elapsed host time when dequeued.
+                const double time =
+                        std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+                                .count();
+                points.push_back({time, value});
+                if (points.size() > IMU_MAX_POINTS)
+                        points.pop_front();
+        })) {
                 auto transMin = points.front().value.trans.x;
                 auto transMax = transMin;
                 auto rotMin   = points.front().value.rot.x;
@@ -343,13 +368,7 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                         rotMin - rotPadding,
                         rotMax + rotPadding);
                 std::fflush(file);
-
-                dirty      = false;
-                nextRedraw = now + REDRAW_INTERVAL;
         }
-
-        std::fputs("exit\n", file);
-        pclose(file);
 }
 
 void runImuOrientation(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
@@ -357,30 +376,21 @@ void runImuOrientation(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
         if (st.stop_requested())
                 return;
 
-        FILE* file = popen("gnuplot -persist", "w");
-
-        if (file == nullptr) {
-                logger::log("OPEN PROCESS gnuplot FAILED");
+        auto process = openGnuplot();
+        if (!process)
                 return;
-        }
+        FILE* file = process.get();
 
         configureOrientationPlot(file);
 
         Orientation orientation;
+        RedrawTimer timer;
 
-        while (!st.stop_requested()) {
-                if (inQueue.empty()) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                        continue;
-                }
-
-                auto value = inQueue.pop();
+        while (readPlotBatch(st, inQueue, timer, [&](frame::Imu value) {
                 updateOrientation(orientation, value);
+        })) {
                 drawOrientation(file, orientation);
         }
-
-        std::fputs("exit\n", file);
-        pclose(file);
 }
 
 } // namespace demo

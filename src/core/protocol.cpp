@@ -23,8 +23,8 @@ static void waitforReady(std::stop_token& st, xqueue::Queue<frame::systemMessage
                 if (st.stop_requested())
                         return;
 
-                if (mQueue.empty())
-                        continue;
+                if (!mQueue.waitData(st))
+                        return;
 
                 sm = mQueue.pop();
 

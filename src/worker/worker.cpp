@@ -1,5 +1,8 @@
 #include "worker/worker.hpp"
+#include "utility/error.hpp"
+#include "worker/processor.hpp"
 
+#include <expected>
 #include <utility>
 
 namespace worker

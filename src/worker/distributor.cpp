@@ -48,8 +48,8 @@ template <> void Plotter<frame::Encoder>::run(std::stop_token st)
 {
         // TODO
         while (!st.stop_requested()) {
-                if (this->inQueue.empty())
-                        continue;
+                if (!this->inQueue.waitData(st))
+                        break;
 
                 this->inQueue.pop();
         }

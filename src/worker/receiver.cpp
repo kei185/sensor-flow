@@ -60,7 +60,19 @@ void Receiver::run(std::stop_token st)
                 if (type == frame::Type::UNKNOWN)
                         continue;
 
-                this->frameStreams.at(type)->push(std::move(fr));
+                auto& stream = this->frameStreams.at(type);
+
+                stream->push(std::move(fr));
+
+                switch (type) {
+                        case frame::Type::SYSTEM:
+                        case frame::Type::IMU:
+                        case frame::Type::ENCODER:
+                                stream->awakeConsumer();
+                                continue;
+                        default:
+                                continue;
+                }
         }
 
         return;

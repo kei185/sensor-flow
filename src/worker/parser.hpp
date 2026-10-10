@@ -29,12 +29,16 @@ template <typename T> void Parser<T>::run(std::stop_token st)
         logger::log("PARSER DISPATCHED");
 
         while (!st.stop_requested()) {
+                if (this->type != frame::Type::LIDAR && !this->inQueue.waitData(st))
+                        break;
+
                 if (this->inQueue.empty())
                         continue;
 
                 frame::Frame fr = this->inQueue.pop();
 
                 this->outQueue.push_range(Parser<T>::parsePayload(fr));
+                this->outQueue.awakeConsumer();
         }
 
         logger::log("thread requested stop");
