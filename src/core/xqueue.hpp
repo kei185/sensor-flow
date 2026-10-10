@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -34,6 +35,14 @@ template <typename T> struct Queue : QueueBase
         {
                 std::unique_lock lock(this->mutex);
                 return this->conditionVariable->wait(lock, st, [this] {
+                        return !this->queue.empty();
+                });
+        }
+
+        bool waitData(std::stop_token st, std::chrono::steady_clock::time_point deadline)
+        {
+                std::unique_lock lock(this->mutex);
+                return this->conditionVariable->wait_until(lock, st, deadline, [this] {
                         return !this->queue.empty();
                 });
         }

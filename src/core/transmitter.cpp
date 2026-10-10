@@ -66,14 +66,10 @@ std::expected<void, error::Error> Transmitter::session(
                 if (st.stop_requested())
                         return std::unexpected(error::makeError(error::Code::THREAD_ABORTED));
 
-                // check buffer
-                if (mQueue.empty()) {
-                        // if timeout
-                        if (std::chrono::steady_clock::now() >= deadline)
-                                return std::unexpected(
-                                        error::makeError(error::Code::OPERATION_TIMEOUT));
-
-                        continue;
+                if (!mQueue.waitData(st, deadline)) {
+                        const auto code = st.stop_requested() ? error::Code::THREAD_ABORTED
+                                                              : error::Code::OPERATION_TIMEOUT;
+                        return std::unexpected(error::makeError(code));
                 }
 
                 auto res = mQueue.pop();
