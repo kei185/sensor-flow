@@ -9,7 +9,7 @@
 
 namespace frame
 {
-const std::chrono::milliseconds OPERATION_TIMEOUT(5000);
+const std::chrono::milliseconds OPERATION_TIMEOUT(3000);
 
 const size_t            FRAME_HEADER_SIZE = RAW_HEADER_SIZE;
 const uint8_t           START_OF_FRAME[]  = {0xAA, 0x55};

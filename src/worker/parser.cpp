@@ -2,6 +2,7 @@
 #include "core/frame.hpp"
 #include "utility/toInt.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -11,9 +12,12 @@ namespace parser
 template <>
 std::vector<frame::systemMessage> Parser<frame::systemMessage>::parsePayload(frame::Frame& fr)
 {
+        uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::system_clock::now().time_since_epoch())
+                                     .count();
 
         return {{
-                .timestamp = fr.receivedAt,
+                .timestamp = timestamp,
                 .message   = std::string(fr.payload.begin(), fr.payload.end()),
                 .type      = fr.type,
         }};

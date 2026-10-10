@@ -18,8 +18,6 @@ namespace transmitter
 
 Transmitter::Transmitter(io::Port& port) : port(port) {}
 
-io::Port& Transmitter::borrow() { return this->port; }
-
 /**
  * Transmits a frame of the given type of operation.
  */
@@ -54,8 +52,7 @@ std::expected<frame::systemMessage, error::Error> Transmitter::session(
         std::stop_token                      st,
         xqueue::Queue<frame::systemMessage>& mQueue,
         frame::OperationType                 type,
-        std::span<uint8_t>                   data,
-        std::chrono::milliseconds            timeout)
+        std::span<uint8_t>                   data)
 {
         if (st.stop_requested())
                 return std::unexpected(error::makeError(error::Code::THREAD_ABORTED));
@@ -65,7 +62,7 @@ std::expected<frame::systemMessage, error::Error> Transmitter::session(
                 return std::unexpected(result.error());
 
         // set timeout
-        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        const auto deadline = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
 
         if (!mQueue.waitData(st, deadline)) {
                 const auto code = st.stop_requested() ? error::Code::THREAD_ABORTED

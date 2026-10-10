@@ -19,8 +19,6 @@
 namespace protocol
 {
 
-static constexpr auto HANDSHAKE_INTERVAL = std::chrono::seconds(3);
-
 static std::expected<frame::systemMessage, error::Error>
 waitFor(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue, frame::Type type)
 {
@@ -53,13 +51,8 @@ static std::expected<void, error::Error> handshake(
                 while (!mQueue.empty())
                         mQueue.pop();
 
-                const auto retryAt = std::chrono::steady_clock::now() + HANDSHAKE_INTERVAL;
-                auto       result  = transmitter.session(
-                        st,
-                        mQueue,
-                        frame::OperationType::HANDSHAKE,
-                        {},
-                        HANDSHAKE_INTERVAL);
+                const auto retryAt = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
+                auto result = transmitter.session(st, mQueue, frame::OperationType::HANDSHAKE);
                 if (result)
                         return {};
                 if (result.error().code == error::Code::THREAD_ABORTED)
