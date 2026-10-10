@@ -64,21 +64,23 @@ std::expected<frame::systemMessage, error::Error> Transmitter::session(
         // set timeout
         const auto deadline = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
 
-        if (!mQueue.waitData(st, deadline)) {
-                const auto code = st.stop_requested() ? error::Code::THREAD_ABORTED
-                                                      : error::Code::OPERATION_TIMEOUT;
-                return std::unexpected(error::makeError(code));
+        while (1) {
+                // check stop request
+                if (st.stop_requested())
+                        return std::unexpected(error::makeError(error::Code::THREAD_ABORTED));
+
+                if (!mQueue.waitData(st, deadline)) {
+                        const auto code = st.stop_requested() ? error::Code::THREAD_ABORTED
+                                                              : error::Code::OPERATION_TIMEOUT;
+                        return std::unexpected(error::makeError(code));
+                }
+
+                auto res = mQueue.pop();
+
+                logger::log(std::format("RECEIVED {}", res.message));
+                if (res.type == frame::toAckType(type))
+                        return res;
         }
-
-        if (st.stop_requested())
-                return std::unexpected(error::makeError(error::Code::THREAD_ABORTED));
-
-        auto res = mQueue.pop();
-        logger::log(std::format("RECEIVED {}", res.message));
-        if (res.type != frame::toAckType(type))
-                return std::unexpected(error::makeError(error::Code::PROTOCOL_ERROR));
-
-        return res;
 };
 
 } // namespace transmitter
