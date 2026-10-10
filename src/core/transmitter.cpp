@@ -54,9 +54,6 @@ std::expected<frame::systemMessage, error::Error> Transmitter::session(
         frame::OperationType                 type,
         std::span<uint8_t>                   data)
 {
-        if (st.stop_requested())
-                return std::unexpected(error::makeError(error::Code::THREAD_ABORTED));
-
         // transmit
         if (auto result = this->transmit(type, data); !result)
                 return std::unexpected(result.error());
