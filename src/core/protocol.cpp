@@ -21,7 +21,6 @@ namespace protocol
 
 static std::expected<void, error::Error>
 waitFor(std::stop_token, xqueue::Queue<frame::systemMessage>&, frame::Type);
-
 void run(
         std::stop_token                      st,
         transmitter::Transmitter&            transmitter,
@@ -49,8 +48,6 @@ void run(
                         logger::log(result.error());
                         continue;
                 }
-                if (st.stop_requested())
-                        return;
 
                 std::println("press ENTER to start scan");
                 std::string s;
@@ -65,7 +62,8 @@ void run(
 static std::expected<void, error::Error>
 waitFor(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue, frame::Type type)
 {
-        logger::log(std::format("WAITING FOR {}...", frame::toString(type)));
+        logger::log(std::format("WAITING FOR {}", frame::toString(type)));
+
         const auto deadline = std::chrono::steady_clock::now() + frame::OPERATION_TIMEOUT;
 
         frame::systemMessage sm;
@@ -82,6 +80,7 @@ waitFor(std::stop_token st, xqueue::Queue<frame::systemMessage>& mQueue, frame::
                 sm = mQueue.pop();
 
                 logger::log(std::format("DEVICE '{}'", sm.message));
+
                 if (sm.type == frame::Type::STARTUP_FAILED)
                         return std::unexpected(error::makeError(error::Code::PROTOCOL_ERROR));
         } while (sm.type != type);
@@ -102,8 +101,6 @@ timSync(std::stop_token                      st,
         uint64_t sendTimeInt = std::chrono::duration_cast<std::chrono::milliseconds>(
                                        std::chrono::system_clock::now().time_since_epoch())
                                        .count();
-        if (sendTimeInt < res->timestamp)
-                return std::unexpected(error::makeError(error::Code::PROTOCOL_ERROR));
 
         std::array<uint8_t, 16> payload = {};
         for (size_t i = 0; i < sizeof(uint64_t); ++i) {
@@ -115,8 +112,6 @@ timSync(std::stop_token                      st,
         auto ack = transmitter.session(st, mQueue, frame::OperationType::TIME, std::span(payload));
         if (!ack)
                 return std::unexpected(ack.error());
-        if (auto result = waitFor(st, mQueue, frame::Type::TIME_REPORT); !result)
-                return result;
 
         logger::log("TIME SYNC DONE");
         return {};
