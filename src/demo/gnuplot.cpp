@@ -14,6 +14,7 @@
 #include <mutex>
 #include <numbers>
 #include <string>
+#include <utility>
 
 namespace demo
 {
@@ -102,9 +103,9 @@ struct ImuSample
         frame::Imu value;
 };
 
-std::string toString(frame::LidarPoint point)
+std::string toString(const std::pair<double, double>& point)
 {
-        return std::format("{} {}", point.angle, point.dist);
+        return std::format("{} {}", point.first, point.second);
 }
 
 std::string toString(frame::Imu sample)
@@ -284,13 +285,16 @@ void run(std::stop_token st, xqueue::Queue<frame::LidarPoint>& inQueue)
                 "set style line 1 linecolor rgb '#00AEEF' pointtype 7 pointsize 0.5\n",
                 file);
 
-        std::deque<frame::LidarPoint> points;
-        RedrawTimer                   timer;
+        std::deque<std::pair<double, double>> points;
+        RedrawTimer                           timer;
 
-        while (readPlotBatch(st, inQueue, timer, [&](frame::LidarPoint point) {
-                points.push_back(point);
-                if (points.size() > LIDAR_MAX_POINTS)
-                        points.pop_front();
+        while (readPlotBatch(st, inQueue, timer, [&](const frame::LidarPoint& scan) {
+                for (size_t i = 0; i < scan.point.size(); ++i) {
+                        const double angle = std::fmod(scan.angleStart + scan.angleDiff * i, 360.0);
+                        points.emplace_back(angle, scan.point[i]);
+                        if (points.size() > LIDAR_MAX_POINTS)
+                                points.pop_front();
+                }
         })) {
                 std::fputs("plot '-' using 1:2 with points linestyle 1\n", file);
                 for (const auto& point : points)
