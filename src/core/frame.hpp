@@ -200,8 +200,11 @@ inline constexpr size_t RAW_HEADER_SIZE  = TIMESTAMP_OFFSET + sizeof(uint32_t);
 
 struct LidarPoint
 {
-        uint16_t dist;
-        float    angle;
+        uint64_t            timestamp;
+        double              angleStart;
+        double              angleEnd;
+        double              angleDiff;
+        std::vector<double> point;
 };
 constexpr size_t LIDAR_POINT_SIZE = 2 + 2;
 
@@ -215,14 +218,17 @@ constexpr size_t IMU_ACCEL_VALUE_SIZE = 2;
 
 struct Imu
 {
+        uint64_t     timestamp;
         Acceleration rot;
         Acceleration trans;
 };
 
 struct Encoder
 {
-        float right;
-        float left;
+
+        uint64_t timestamp;
+        float    right;
+        float    left;
 };
 
 struct systemMessage
