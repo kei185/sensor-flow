@@ -9,18 +9,16 @@
 namespace parser
 {
 
-static uint64_t currentTimestamp()
-{
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                .count();
-}
-
 template <>
 std::vector<frame::systemMessage> Parser<frame::systemMessage>::parsePayload(frame::Frame& fr)
 {
+        uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::system_clock::now().time_since_epoch())
+                                     .count();
+        // Time synchronization uses the host's ACK receive time.
+
         return {{
-                .timestamp = currentTimestamp(),
+                .timestamp = timestamp,
                 .message   = std::string(fr.payload.begin(), fr.payload.end()),
                 .type      = fr.type,
         }};
@@ -34,7 +32,7 @@ template <> std::vector<frame::LidarPoint> Parser<frame::LidarPoint>::parsePaylo
 
         std::vector<frame::LidarPoint> points(1);
         auto&                          point = points.front();
-        point.timestamp                      = currentTimestamp();
+        point.timestamp                      = fr.timestamp;
         point.angleStart                     = toInt16(fr.payload.data() + sizeof(uint16_t)) / 64.0;
         point.angleEnd = toInt16(fr.payload.data() + (count - 1) * frame::LIDAR_POINT_SIZE +
                                  sizeof(uint16_t)) /
@@ -61,7 +59,7 @@ template <> std::vector<frame::Imu> Parser<frame::Imu>::parsePayload(frame::Fram
         uint8_t* head = fr.payload.data();
 
         return {(frame::Imu){
-                .timestamp = currentTimestamp(),
+                .timestamp = fr.timestamp,
                 .rot =
                         {
                                 .x = toSignedInt16(head),

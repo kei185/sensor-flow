@@ -321,10 +321,10 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
         RedrawTimer           timer;
 
         while (readPlotBatch(st, inQueue, timer, [&](frame::Imu value) {
-                // Imu has no device timestamp; use elapsed host time when dequeued.
                 const double time =
                         std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
                                 .count();
+                // Use elapsed host time for the plot's horizontal axis.
                 points.push_back({time, value});
                 if (points.size() > IMU_MAX_POINTS)
                         points.pop_front();

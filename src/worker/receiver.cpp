@@ -117,7 +117,7 @@ std::expected<frame::FrameHeader, Error> Receiver::getFrameHeader(io::Port& port
         frame::FrameHeader frh = {
                 .length    = toInt16(rawHeader.data()),
                 .type      = static_cast<frame::Type>(rawHeader[frame::TYPE_OFFSET]),
-                .timestamp = toInt32(rawHeader.data() + frame::TIMESTAMP_OFFSET),
+                .timestamp = toInt64(rawHeader.data() + frame::TIMESTAMP_OFFSET),
         };
 
         return frh;
@@ -127,9 +127,10 @@ std::expected<frame::Frame, Error>
 Receiver::getPayload(io::Port& port, const frame::FrameHeader& frh)
 {
         frame::Frame fr;
-        fr.length  = frh.length;
-        fr.type    = frh.type;
-        fr.payload = std::vector<uint8_t>(fr.length);
+        fr.timestamp = frh.timestamp;
+        fr.length    = frh.length;
+        fr.type      = frh.type;
+        fr.payload   = std::vector<uint8_t>(fr.length);
 
         auto result = port.readRaw(std::span<uint8_t>(fr.payload));
         if (!result.has_value())
