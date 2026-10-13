@@ -8,19 +8,15 @@
 #include <string_view>
 #include <vector>
 
+namespace frame
+{
 /**
  * @see https://github.com/kei185/sensor-echo/blob/main/docs/frame.md#tx-frame
  */
-namespace frame
-{
 
 extern const std::chrono::milliseconds OPERATION_TIMEOUT;
 extern const uint8_t                   START_OF_FRAME[];
 
-/**
- * Host -> MCU
- * command type
- */
 enum class OperationType
 {
         START_SCAN,
@@ -30,11 +26,15 @@ enum class OperationType
         SOFT_RESET,
         MOTOR,
 };
+/**
+ * Host -> MCU
+ * command type
+ */
 
+extern const std::map<OperationType, std::array<uint8_t, 2>> OPERATION;
 /**
  * OperationType -> command
  */
-extern const std::map<OperationType, std::array<uint8_t, 2>> OPERATION;
 
 constexpr std::string_view toString(OperationType type)
 {
@@ -56,15 +56,10 @@ constexpr std::string_view toString(OperationType type)
         }
 }
 
-/**
- * MCU -> Host
- * frame type
- */
 enum class Type : uint8_t
 {
-        // Internal queue category; not a wire type.
         SYSTEM = 0x00,
-        // below are wire types
+        // Internal queue category; not a wire type.
         LIDAR               = 0x01,
         IMU                 = 0x02,
         ENCODER             = 0x03,
@@ -82,6 +77,10 @@ enum class Type : uint8_t
         SOFT_RESET_ACK      = 0x0F,
         UNKNOWN             = 0x10,
 };
+/**
+ * MCU -> Host
+ * frame type
+ */
 
 extern const std::vector<Type> TYPES;
 
@@ -150,8 +149,7 @@ constexpr Type frameQueueMUX(Type type)
         switch (type) {
                 case Type::LIDAR:
                 case Type::IMU:
-                        // TODO
-                        // case Type::ENCODER:
+                case Type::ENCODER:
                         return type;
 
                 case Type::SYSTEM:
@@ -193,11 +191,11 @@ struct Frame
 using Crc     = uint8_t;
 using CrcData = uint16_t;
 
-// the base is at the payload length byte field
 inline constexpr size_t CRC_OFFSET       = sizeof(CrcData);
 inline constexpr size_t TYPE_OFFSET      = CRC_OFFSET + sizeof(Crc);
 inline constexpr size_t TIMESTAMP_OFFSET = TYPE_OFFSET + sizeof(Type);
 inline constexpr size_t RAW_HEADER_SIZE  = TIMESTAMP_OFFSET + sizeof(uint64_t);
+// the base is at the payload length byte field
 
 struct LidarPoint
 {

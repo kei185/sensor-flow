@@ -14,6 +14,7 @@
 #include <mutex>
 #include <numbers>
 #include <string>
+#include <utility>
 
 namespace demo
 {
@@ -72,10 +73,10 @@ auto openGnuplot()
 }
 
 constexpr double IMU_SAMPLE_RATE_HZ = 15.0;
-// The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
 constexpr double GYRO_SENSITIVITY_DPS_PER_LSB = 4.375 / 1000.0;
-// Use accelerometer tilt as a small correction to limit integrated gyro drift.
+// The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
 constexpr double ACCELEROMETER_CORRECTION    = 0.02;
+// Use accelerometer tilt as a small correction to limit integrated gyro drift.
 constexpr double PLANE_HALF_LENGTH           = 1.2;
 constexpr double PLANE_HALF_WIDTH            = 0.8;
 constexpr double PLANE_FORWARD_MARKER_LENGTH = 1.5;
@@ -102,9 +103,9 @@ struct ImuSample
         frame::Imu value;
 };
 
-std::string toString(frame::LidarPoint point)
+std::string toString(const std::pair<double, double>& point)
 {
-        return std::format("{} {}", point.angle, point.dist);
+        return std::format("{} {}", point.first, point.second);
 }
 
 std::string toString(frame::Imu sample)
@@ -284,13 +285,16 @@ void run(std::stop_token st, xqueue::Queue<frame::LidarPoint>& inQueue)
                 "set style line 1 linecolor rgb '#00AEEF' pointtype 7 pointsize 0.5\n",
                 file);
 
-        std::deque<frame::LidarPoint> points;
-        RedrawTimer                   timer;
+        std::deque<std::pair<double, double>> points;
+        RedrawTimer                           timer;
 
-        while (readPlotBatch(st, inQueue, timer, [&](frame::LidarPoint point) {
-                points.push_back(point);
-                if (points.size() > LIDAR_MAX_POINTS)
-                        points.pop_front();
+        while (readPlotBatch(st, inQueue, timer, [&](const frame::LidarPoint& scan) {
+                for (size_t i = 0; i < scan.point.size(); ++i) {
+                        const double angle = std::fmod(scan.angleStart + scan.angleDiff * i, 360.0);
+                        points.emplace_back(angle, scan.point[i]);
+                        if (points.size() > LIDAR_MAX_POINTS)
+                                points.pop_front();
+                }
         })) {
                 std::fputs("plot '-' using 1:2 with points linestyle 1\n", file);
                 for (const auto& point : points)
@@ -317,10 +321,10 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
         RedrawTimer           timer;
 
         while (readPlotBatch(st, inQueue, timer, [&](frame::Imu value) {
-                // Imu has no device timestamp; use elapsed host time when dequeued.
                 const double time =
                         std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
                                 .count();
+                // Use elapsed host time for the plot's horizontal axis.
                 points.push_back({time, value});
                 if (points.size() > IMU_MAX_POINTS)
                         points.pop_front();
@@ -342,9 +346,9 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                 }
                 std::fputs("EOD\n", file);
 
-                // Keep flat signals visible and avoid an empty range, including all-zero data.
                 const double transPadding = std::max(1.0, (transMax - transMin) * 0.05);
                 const double rotPadding   = std::max(1.0, (rotMax - rotMin) * 0.05);
+                // Keep flat signals visible and avoid an empty range, including all-zero data.
                 std::fprintf(
                         file,
                         "set xrange [%.6f:%.6f]\n",
@@ -354,9 +358,6 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                         file,
                         "set yrange [%f:%f]\n"
                         "set y2range [%f:%f]\n"
-                        // The Qt terminal draws multiplot panels one at a time, which exposes
-                        // a blank canvas during live redraws. Two Y axes keep both scales in
-                        // one plot so each update is presented as a single frame.
                         "plot $imu using 1:2 axes x1y1 title 'Translation X' linestyle 1, "
                         "$imu using 1:3 axes x1y1 title 'Translation Y' linestyle 2, "
                         "$imu using 1:4 axes x1y1 title 'Translation Z' linestyle 3, "
@@ -367,6 +368,9 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                         transMax + transPadding,
                         rotMin - rotPadding,
                         rotMax + rotPadding);
+                // The Qt terminal draws multiplot panels one at a time, which exposes
+                // a blank canvas during live redraws. Two Y axes keep both scales in
+                // one plot so each update is presented as a single frame.
                 std::fflush(file);
         }
 }
