@@ -179,12 +179,13 @@ struct FrameHeader
 
         uint16_t length;
         Type     type;
-        uint32_t timestamp;
+        uint64_t timestamp;
 };
 extern const size_t FRAME_HEADER_SIZE;
 
 struct Frame
 {
+        uint64_t             timestamp;
         uint16_t             length;
         Type                 type;
         std::vector<uint8_t> payload;
@@ -196,7 +197,7 @@ using CrcData = uint16_t;
 inline constexpr size_t CRC_OFFSET       = sizeof(CrcData);
 inline constexpr size_t TYPE_OFFSET      = CRC_OFFSET + sizeof(Crc);
 inline constexpr size_t TIMESTAMP_OFFSET = TYPE_OFFSET + sizeof(Type);
-inline constexpr size_t RAW_HEADER_SIZE  = TIMESTAMP_OFFSET + sizeof(uint32_t);
+inline constexpr size_t RAW_HEADER_SIZE  = TIMESTAMP_OFFSET + sizeof(uint64_t);
 
 struct LidarPoint
 {
