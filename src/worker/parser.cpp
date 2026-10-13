@@ -73,10 +73,16 @@ template <> std::vector<frame::Imu> Parser<frame::Imu>::parsePayload(frame::Fram
                 }}};
 }
 
-// TODO
 template <> std::vector<frame::Encoder> Parser<frame::Encoder>::parsePayload(frame::Frame& fr)
 {
-        return {};
+        if (fr.payload.size() < 2 * sizeof(uint16_t))
+                return {};
+
+        return {{
+                .timestamp = fr.timestamp,
+                .right     = toInt16(fr.payload.data() + sizeof(uint16_t)) / 64.0f,
+                .left      = toInt16(fr.payload.data()) / 64.0f,
+        }};
 }
 
 } // namespace parser

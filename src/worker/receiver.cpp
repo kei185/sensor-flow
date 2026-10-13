@@ -38,13 +38,13 @@ void Receiver::run(std::stop_token st)
         frame::Frame                             fr;
 
         while (1) {
-                // drain bytes until SOF is found
-                // return if thread aborted
                 if (!unwrap(this->findSOF(st, this->port)))
                         return;
+                // drain bytes until SOF is found
+                // return if thread aborted
 
-                // read frame header
                 frh = this->getFrameHeader(this->port);
+                // read frame header
                 if (!frh.has_value()) {
                         if (frh.error().code == error::Code::INVALID_CRC)
                                 continue;
@@ -52,10 +52,9 @@ void Receiver::run(std::stop_token st)
                                 abortByError(frh.error());
                 }
 
-                // read payload
                 fr = unwrap(this->getPayload(this->port, frh.value()));
+                // read payload
 
-                // push frame to queue
                 auto type = frame::frameQueueMUX(fr.type);
                 if (type == frame::Type::UNKNOWN)
                         continue;
@@ -63,6 +62,7 @@ void Receiver::run(std::stop_token st)
                 auto& stream = this->frameStreams.at(type);
 
                 stream->push(std::move(fr));
+                // push frame to queue
 
                 switch (type) {
                         case frame::Type::SYSTEM:
@@ -78,9 +78,6 @@ void Receiver::run(std::stop_token st)
         return;
 }
 
-/**
- * @return false if the thread is stopped, true if the SOF is found
- */
 std::expected<bool, Error> Receiver::findSOF(std::stop_token& st, io::Port& port)
 {
         std::array<uint8_t, 1> byte       = {};
@@ -101,6 +98,9 @@ std::expected<bool, Error> Receiver::findSOF(std::stop_token& st, io::Port& port
 
         return true;
 };
+/**
+ * @return false if the thread is stopped, true if the SOF is found
+ */
 
 std::expected<frame::FrameHeader, Error> Receiver::getFrameHeader(io::Port& port)
 {
@@ -113,12 +113,12 @@ std::expected<frame::FrameHeader, Error> Receiver::getFrameHeader(io::Port& port
         if (!Receiver::isValidCRC(rawHeader))
                 return std::unexpected(error::makeError(error::Code::INVALID_CRC));
 
-        // TODO: low priority fix hard code
         frame::FrameHeader frh = {
                 .length    = toInt16(rawHeader.data()),
                 .type      = static_cast<frame::Type>(rawHeader[frame::TYPE_OFFSET]),
                 .timestamp = toInt64(rawHeader.data() + frame::TIMESTAMP_OFFSET),
         };
+        // TODO: low priority fix hard code
 
         return frh;
 }

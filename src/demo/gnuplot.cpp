@@ -73,10 +73,10 @@ auto openGnuplot()
 }
 
 constexpr double IMU_SAMPLE_RATE_HZ = 15.0;
-// The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
 constexpr double GYRO_SENSITIVITY_DPS_PER_LSB = 4.375 / 1000.0;
-// Use accelerometer tilt as a small correction to limit integrated gyro drift.
+// The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
 constexpr double ACCELEROMETER_CORRECTION    = 0.02;
+// Use accelerometer tilt as a small correction to limit integrated gyro drift.
 constexpr double PLANE_HALF_LENGTH           = 1.2;
 constexpr double PLANE_HALF_WIDTH            = 0.8;
 constexpr double PLANE_FORWARD_MARKER_LENGTH = 1.5;
@@ -346,9 +346,9 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                 }
                 std::fputs("EOD\n", file);
 
-                // Keep flat signals visible and avoid an empty range, including all-zero data.
                 const double transPadding = std::max(1.0, (transMax - transMin) * 0.05);
                 const double rotPadding   = std::max(1.0, (rotMax - rotMin) * 0.05);
+                // Keep flat signals visible and avoid an empty range, including all-zero data.
                 std::fprintf(
                         file,
                         "set xrange [%.6f:%.6f]\n",
@@ -358,9 +358,6 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                         file,
                         "set yrange [%f:%f]\n"
                         "set y2range [%f:%f]\n"
-                        // The Qt terminal draws multiplot panels one at a time, which exposes
-                        // a blank canvas during live redraws. Two Y axes keep both scales in
-                        // one plot so each update is presented as a single frame.
                         "plot $imu using 1:2 axes x1y1 title 'Translation X' linestyle 1, "
                         "$imu using 1:3 axes x1y1 title 'Translation Y' linestyle 2, "
                         "$imu using 1:4 axes x1y1 title 'Translation Z' linestyle 3, "
@@ -371,6 +368,9 @@ void runImuTimeSeries(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
                         transMax + transPadding,
                         rotMin - rotPadding,
                         rotMax + rotPadding);
+                // The Qt terminal draws multiplot panels one at a time, which exposes
+                // a blank canvas during live redraws. Two Y axes keep both scales in
+                // one plot so each update is presented as a single frame.
                 std::fflush(file);
         }
 }
