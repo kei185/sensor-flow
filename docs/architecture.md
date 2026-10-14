@@ -119,7 +119,7 @@ flowchart LR
     source -->|incoming bytes| io
     io --> receiver
     receiver --> frameType
-    frameType -->|Non-sensor messages: 0x04 to 0x08| systemFrames
+    frameType -->|Non-sensor messages: 0x04 to 0x0F| systemFrames
     frameType -->|Sensor data: LIDAR 0x01| lidarFrames
     systemFrames --> systemParser --> systemData --> controller
     lidarFrames --> lidarParser --> lidarData --> plotter --> output
@@ -129,9 +129,9 @@ flowchart LR
     linkStyle default stroke:#E5E7EB,stroke-width:2px;
 ```
 
-The intended routing sends valid sensor data to its sensor-specific Frame queue and all non-sensor messages to the SYSTEM Frame queue. The currently defined non-sensor wire types are INITIALIZING (`0x04`), DEVICE_INFO (`0x05`), HEALTH_STATUS (`0x06`), READY (`0x07`), and STARTUP_FAILED (`0x08`). LIDAR (`0x01`) is the only sensor path with a queue and parser today; IMU (`0x02`) and Encoder (`0x03`) would need their own sensor paths when supported.
+`Receiver` uses `frameQueueMUX()` to route LIDAR (`0x01`), IMU (`0x02`), and Encoder (`0x03`) to their sensor-specific Frame queues. Non-sensor messages (`0x04` through `0x0F`), including command ACKs, go to the SYSTEM Frame queue.
 
-The SYSTEM routing shown above is not implemented yet. `Receiver` currently uses the wire type directly as the `frameStreams` key, so types `0x04` through `0x08` create queues without a parser instead of reaching the SYSTEM queue. This remains part of [issue #1](https://github.com/kei185/my-plot/issues/1).
+The diagram shows the SYSTEM and LIDAR paths. IMU and Encoder also have Frame queues, typed data queues, parser workers, and distributor workers created by `application::init()`. Ill-formed sensor payloads that cannot contain a complete sample are ignored; the parser continues with the next frame. See [Frame Payload Parsing](frame.md) for the size rules and Encoder decoding.
 
 `Manager` owns one `io::Port`. `Receiver` reads incoming bytes from its POSIX file descriptor, while `Transmitter` writes commands through the same port.
 
