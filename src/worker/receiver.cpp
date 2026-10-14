@@ -38,10 +38,11 @@ void Receiver::run(std::stop_token st)
         frame::Frame                             fr;
 
         while (1) {
-                if (!unwrap(this->findSOF(st, this->port)))
-                        return;
+
                 // drain bytes until SOF is found
                 // return if thread aborted
+                if (!unwrap(this->findSOF(st, this->port)))
+                        return;
 
                 frh = this->getFrameHeader(this->port);
                 // read frame header
@@ -52,8 +53,8 @@ void Receiver::run(std::stop_token st)
                                 abortByError(frh.error());
                 }
 
-                fr = unwrap(this->getPayload(this->port, frh.value()));
                 // read payload
+                fr = unwrap(this->getPayload(this->port, frh.value()));
 
                 auto type = frame::frameQueueMUX(fr.type);
                 if (type == frame::Type::UNKNOWN)
@@ -61,8 +62,8 @@ void Receiver::run(std::stop_token st)
 
                 auto& stream = this->frameStreams.at(type);
 
-                stream->push(std::move(fr));
                 // push frame to queue
+                stream->push(std::move(fr));
 
                 switch (type) {
                         case frame::Type::SYSTEM:
