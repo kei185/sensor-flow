@@ -122,11 +122,9 @@ drive(std::stop_token                      st,
 
                 auto directive = dQueue.pop();
 
-                auto ack = transmitter.session(
-                        st,
-                        mQueue,
-                        frame::OperationType::MOTOR,
-                        std::array<uint8_t, 2>{directive.left, directive.right};);
+                auto payload = std::array<uint8_t, 2>{directive.left, directive.right};
+
+                auto ack = transmitter.session(st, mQueue, frame::OperationType::MOTOR, payload);
 
                 if (!ack) {
                         if (ack.error().code == error::Code::THREAD_ABORTED)
