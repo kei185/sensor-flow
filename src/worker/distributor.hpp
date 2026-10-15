@@ -18,13 +18,15 @@ struct DeviceController : processor::Processor
         frame::Type                          type;
         transmitter::Transmitter&            transmitter;
         xqueue::Queue<frame::systemMessage>& inQueue;
+        xqueue::Queue<frame::MotorCommand>&  directiveQueue;
 
         void run(std::stop_token) override;
 
         DeviceController(
                 frame::Type,
                 transmitter::Transmitter&,
-                xqueue::Queue<frame::systemMessage>&);
+                xqueue::Queue<frame::systemMessage>&,
+                xqueue::Queue<frame::MotorCommand>&);
 };
 
 template <typename T> struct Plotter : processor::Processor

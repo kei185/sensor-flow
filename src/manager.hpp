@@ -23,8 +23,9 @@ struct Manager
 {
         std::unique_ptr<io::Port> port;
 
-        std::unique_ptr<FrameStreams> frameStreams;
-        std::unique_ptr<DataStreams>  dataStreams;
+        std::unique_ptr<xqueue::Queue<frame::MotorCommand>> directiveQueue;
+        std::unique_ptr<FrameStreams>                  frameStreams;
+        std::unique_ptr<DataStreams>                   dataStreams;
 
         std::unique_ptr<transmitter::Transmitter> transmitter;
 
@@ -33,6 +34,7 @@ struct Manager
         std::map<frame::Type, worker::Worker> distributors;
 
         Manager(std::unique_ptr<io::Port>,
+                std::unique_ptr<xqueue::Queue<frame::MotorCommand>>,
                 std::unique_ptr<FrameStreams>,
                 std::unique_ptr<DataStreams>,
                 std::unique_ptr<transmitter::Transmitter>,

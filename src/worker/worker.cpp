@@ -34,10 +34,12 @@ std::expected<void, error::Error> Worker::abort()
 Worker
 worker(frame::Type                          type,
        transmitter::Transmitter&            transmitter,
-       xqueue::Queue<frame::systemMessage>& dataStream)
+       xqueue::Queue<frame::systemMessage>& dataStream,
+       xqueue::Queue<frame::MotorCommand>&  directiveQueue)
 {
         return Worker(
-                std::make_unique<distributor::DeviceController>(type, transmitter, dataStream));
+                std::make_unique<distributor::DeviceController>(
+                        type, transmitter, dataStream, directiveQueue));
 }
 
 } // namespace worker

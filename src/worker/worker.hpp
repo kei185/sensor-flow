@@ -41,6 +41,10 @@ template <typename Payload> Worker worker(frame::Type type, xqueue::Queue<Payloa
         return Worker(std::make_unique<distributor::Plotter<Payload>>(type, dataStream));
 }
 
-Worker worker(frame::Type, transmitter::Transmitter&, xqueue::Queue<frame::systemMessage>&);
+Worker worker(
+        frame::Type,
+        transmitter::Transmitter&,
+        xqueue::Queue<frame::systemMessage>&,
+        xqueue::Queue<frame::MotorCommand>&);
 
 } // namespace worker

@@ -12,10 +12,11 @@ namespace application
 
 std::expected<std::unique_ptr<manager::Manager>, error::Error> init(const std::string& path)
 {
-        auto port         = std::make_unique<io::Port>(path);
-        auto frameStreams = std::make_unique<manager::FrameStreams>();
-        auto dataStreams  = std::make_unique<manager::DataStreams>();
-        auto transmitter  = std::make_unique<transmitter::Transmitter>(*port);
+        auto port           = std::make_unique<io::Port>(path);
+        auto directiveQueue = std::make_unique<xqueue::Queue<frame::MotorCommand>>();
+        auto frameStreams   = std::make_unique<manager::FrameStreams>();
+        auto dataStreams    = std::make_unique<manager::DataStreams>();
+        auto transmitter    = std::make_unique<transmitter::Transmitter>(*port);
 
         worker::Worker receiver(std::make_unique<receiver::Receiver>(*port, *frameStreams));
 
@@ -26,7 +27,7 @@ std::expected<std::unique_ptr<manager::Manager>, error::Error> init(const std::s
         frameStreams->try_emplace(type, std::make_unique<xqueue::Queue<frame::Frame>>());
         auto systemStream  = std::make_unique<xqueue::Queue<frame::systemMessage>>();
         parsers[type]      = worker::worker(type, *frameStreams->at(type), *systemStream);
-        distributors[type] = worker::worker(type, *transmitter, *systemStream);
+        distributors[type] = worker::worker(type, *transmitter, *systemStream, *directiveQueue);
         dataStreams->try_emplace(type, std::move(systemStream));
 
         type = frame::Type::LIDAR;
@@ -52,6 +53,7 @@ std::expected<std::unique_ptr<manager::Manager>, error::Error> init(const std::s
 
         return std::make_unique<manager::Manager>(
                 std::move(port),
+                std::move(directiveQueue),
                 std::move(frameStreams),
                 std::move(dataStreams),
                 std::move(transmitter),

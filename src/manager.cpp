@@ -20,14 +20,16 @@ namespace manager
 {
 
 Manager::Manager(
-        std::unique_ptr<io::Port>                 port,
-        std::unique_ptr<FrameStreams>             frameStreams,
-        std::unique_ptr<DataStreams>              dataStreams,
-        std::unique_ptr<transmitter::Transmitter> transmitter,
-        worker::Worker                            receiverWorker,
-        std::map<frame::Type, worker::Worker>     parsers,
-        std::map<frame::Type, worker::Worker>     distributors)
-    : port(std::move(port)), frameStreams(std::move(frameStreams)),
+        std::unique_ptr<io::Port>                     port,
+        std::unique_ptr<xqueue::Queue<frame::MotorCommand>> directiveQueue,
+        std::unique_ptr<FrameStreams>                 frameStreams,
+        std::unique_ptr<DataStreams>                  dataStreams,
+        std::unique_ptr<transmitter::Transmitter>     transmitter,
+        worker::Worker                                receiverWorker,
+        std::map<frame::Type, worker::Worker>         parsers,
+        std::map<frame::Type, worker::Worker>         distributors)
+    : port(std::move(port)), directiveQueue(std::move(directiveQueue)),
+      frameStreams(std::move(frameStreams)),
       dataStreams(std::move(dataStreams)), transmitter(std::move(transmitter)),
       receiverWorker(std::move(receiverWorker)), parsers(std::move(parsers)),
       distributors(std::move(distributors))

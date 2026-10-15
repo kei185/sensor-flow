@@ -238,4 +238,10 @@ struct systemMessage
         Type        type;
 };
 
+struct MotorCommand
+{
+        uint8_t right;
+        uint8_t left;
+};
+
 } // namespace frame

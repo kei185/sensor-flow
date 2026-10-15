@@ -1,3 +1,4 @@
+#include "core/frame.hpp"
 #include "core/protocol.hpp"
 #include "worker/distributor.hpp"
 #include "demo/gnuplot.hpp"
@@ -14,12 +15,13 @@ namespace distributor
 DeviceController::DeviceController(
         frame::Type                          type,
         transmitter::Transmitter&            transmiter,
-        xqueue::Queue<frame::systemMessage>& inQueue)
-    : type(type), transmitter(transmiter), inQueue(inQueue) {};
+        xqueue::Queue<frame::systemMessage>& inQueue,
+        xqueue::Queue<frame::MotorCommand>&  directiveQueue)
+    : type(type), transmitter(transmiter), inQueue(inQueue), directiveQueue(directiveQueue) {};
 
 void DeviceController::run(std::stop_token st)
 {
-        protocol::run(st, this->transmitter, this->inQueue);
+        protocol::run(st, this->transmitter, this->inQueue, this->directiveQueue);
 }
 
 /**

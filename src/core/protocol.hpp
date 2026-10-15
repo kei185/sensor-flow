@@ -9,6 +9,10 @@
 namespace protocol
 {
 
-void run(std::stop_token, transmitter::Transmitter&, xqueue::Queue<frame::systemMessage>&);
+void run(
+        std::stop_token,
+        transmitter::Transmitter&,
+        xqueue::Queue<frame::systemMessage>&,
+        xqueue::Queue<frame::MotorCommand>&);
 
 } // namespace protocol
