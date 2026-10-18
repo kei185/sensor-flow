@@ -1,6 +1,7 @@
 #include "core/frame.hpp"
 #include "core/protocol.hpp"
 #include "worker/distributor.hpp"
+#include "demo/debug.hpp"
 #include "demo/gnuplot.hpp"
 
 #include <stop_token>

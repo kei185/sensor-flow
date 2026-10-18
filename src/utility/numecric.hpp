@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <utility>
 
 struct Cartesian
 {
@@ -13,8 +14,17 @@ struct Cartesian
 };
 
 constexpr double translation(double v_l, double v_r) { return (v_l + v_r) / 2.0; }
-
 constexpr double rotation(double v_l, double v_r, double r) { return (v_r - v_l) / r; }
+constexpr std::pair<double, double>
+toVelocityRatio(double v_t, double v_o, double r, double MAX_VELOCITY)
+{
+        double left, right;
+
+        right = 3.0 / 2.0 * v_t - r * v_o / 2.0;
+        left  = (r * v_o - v_t) / 2.0;
+
+        return {left / MAX_VELOCITY, right / MAX_VELOCITY};
+}
 
 constexpr auto minQ6 = std::numeric_limits<int16_t>::min();
 constexpr auto maxQ6 = std::numeric_limits<int16_t>::max();

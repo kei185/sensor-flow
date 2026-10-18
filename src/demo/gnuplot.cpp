@@ -72,10 +72,18 @@ auto openGnuplot()
         return process;
 }
 
-constexpr double IMU_SAMPLE_RATE_HZ = 15.0;
+constexpr double IMU_SAMPLE_RATE_HZ           = 15.0;
 constexpr double GYRO_SENSITIVITY_DPS_PER_LSB = 4.375 / 1000.0;
 // The sensor firmware leaves CTRL6 at its reset default: +/-125 dps.
-constexpr double ACCELEROMETER_CORRECTION    = 0.02;
+constexpr double ACCELEROMETER_SENSITIVITY_G_PER_LSB    = 0.061 / 1000.0;
+constexpr size_t GYRO_CALIBRATION_SAMPLES               = 30;
+constexpr double GYRO_CALIBRATION_MAX_DPS               = 3.0;
+constexpr double GYRO_CALIBRATION_MAX_RANGE_DPS         = 0.5;
+constexpr double GYRO_CALIBRATION_ACCELERATION_CHANGE_G = 0.02;
+constexpr double GYRO_NOISE_THRESHOLD_DPS               = 0.1;
+constexpr double GRAVITY_TOLERANCE_G                    = 0.15;
+constexpr double MAX_SAMPLE_PERIOD                      = 0.5;
+constexpr double ACCELEROMETER_CORRECTION               = 0.02;
 // Use accelerometer tilt as a small correction to limit integrated gyro drift.
 constexpr double PLANE_HALF_LENGTH           = 1.2;
 constexpr double PLANE_HALF_WIDTH            = 0.8;
@@ -84,10 +92,19 @@ constexpr double DEGREES_PER_RADIAN          = 180.0 / std::numbers::pi;
 
 struct Orientation
 {
-        double roll            = 0.0;
-        double pitch           = 0.0;
-        double yaw             = 0.0;
-        bool   tiltInitialized = false;
+        double                roll            = 0.0;
+        double                pitch           = 0.0;
+        double                yaw             = 0.0;
+        bool                  tiltInitialized = false;
+        std::array<double, 3> gyroBias{};
+        std::array<double, 3> gyroSum{};
+        std::array<double, 3> gyroMin{};
+        std::array<double, 3> gyroMax{};
+        frame::Acceleration   calibrationAcceleration{};
+        size_t                calibrationSamples  = 0;
+        size_t                calibrationAttempts = 0;
+        bool                  gyroCalibrated      = false;
+        uint64_t              previousTimestamp   = 0;
 };
 
 struct Point3d
@@ -128,22 +145,119 @@ double blendAngle(double predicted, double measured)
         return wrapDegrees(predicted + ACCELEROMETER_CORRECTION * difference);
 }
 
+void calibrateGyroscope(Orientation& orientation, const frame::Imu& sample, double accelerationG)
+{
+        const std::array<double, 3> rates = {
+                sample.rot.x * GYRO_SENSITIVITY_DPS_PER_LSB,
+                sample.rot.y * GYRO_SENSITIVITY_DPS_PER_LSB,
+                sample.rot.z * GYRO_SENSITIVITY_DPS_PER_LSB,
+        };
+        ++orientation.calibrationAttempts;
+        bool stable = std::abs(accelerationG - 1.0) <= GRAVITY_TOLERANCE_G;
+        for (double rate : rates)
+                stable = stable && std::abs(rate) <= GYRO_CALIBRATION_MAX_DPS;
+
+        if (orientation.calibrationSamples == 0) {
+                orientation.gyroMin = orientation.gyroMax = rates;
+                orientation.gyroSum                       = {};
+                orientation.calibrationAcceleration       = sample.trans;
+        }
+
+        const auto&  reference          = orientation.calibrationAcceleration;
+        const double accelerationChange = std::hypot(
+                                                  double(sample.trans.x) - reference.x,
+                                                  double(sample.trans.y) - reference.y,
+                                                  double(sample.trans.z) - reference.z) *
+                                          ACCELEROMETER_SENSITIVITY_G_PER_LSB;
+        stable = stable && accelerationChange <= GYRO_CALIBRATION_ACCELERATION_CHANGE_G;
+        for (size_t i = 0; i < rates.size(); ++i) {
+                orientation.gyroMin[i] = std::min(orientation.gyroMin[i], rates[i]);
+                orientation.gyroMax[i] = std::max(orientation.gyroMax[i], rates[i]);
+                stable = stable && orientation.gyroMax[i] - orientation.gyroMin[i] <=
+                                           GYRO_CALIBRATION_MAX_RANGE_DPS;
+        }
+
+        if (!stable) {
+                orientation.calibrationSamples = 0;
+        } else {
+                for (size_t i = 0; i < rates.size(); ++i)
+                        orientation.gyroSum[i] += rates[i];
+                if (++orientation.calibrationSamples == GYRO_CALIBRATION_SAMPLES) {
+                        for (size_t i = 0; i < rates.size(); ++i)
+                                orientation.gyroBias[i] =
+                                        orientation.gyroSum[i] / GYRO_CALIBRATION_SAMPLES;
+                        orientation.gyroCalibrated = true;
+                        logger::log(
+                                std::format(
+                                        "IMU gyro bias [deg/s]: X {:.4f}, Y {:.4f}, Z {:.4f}",
+                                        orientation.gyroBias[0],
+                                        orientation.gyroBias[1],
+                                        orientation.gyroBias[2]));
+                }
+        }
+
+        if (!orientation.gyroCalibrated &&
+            orientation.calibrationAttempts % GYRO_CALIBRATION_SAMPLES == 0)
+                logger::log(
+                        std::format(
+                                "IMU waiting for still samples: gyro [{:.3f}, {:.3f}, {:.3f}] "
+                                "deg/s, acceleration {:.3f} g",
+                                rates[0],
+                                rates[1],
+                                rates[2],
+                                accelerationG));
+}
+
 void updateOrientation(Orientation& orientation, const frame::Imu& sample)
 {
-        constexpr double samplePeriod = 1.0 / IMU_SAMPLE_RATE_HZ;
-        const double     gyroStep     = GYRO_SENSITIVITY_DPS_PER_LSB * samplePeriod;
-
-        const double predictedRoll  = orientation.roll + sample.rot.x * gyroStep;
-        const double predictedPitch = orientation.pitch + sample.rot.y * gyroStep;
-        orientation.yaw             = wrapDegrees(orientation.yaw + sample.rot.z * gyroStep);
-
         const double ax             = sample.trans.x;
         const double ay             = sample.trans.y;
         const double az             = sample.trans.z;
         const double verticalLength = std::hypot(ay, az);
         const double totalLength    = std::hypot(ax, verticalLength);
+        const double accelerationG  = totalLength * ACCELEROMETER_SENSITIVITY_G_PER_LSB;
+        const bool   gravityValid   = std::abs(accelerationG - 1.0) <= GRAVITY_TOLERANCE_G;
 
-        if (totalLength <= 1.0) {
+        if (!orientation.gyroCalibrated) {
+                if (gravityValid) {
+                        orientation.roll  = std::atan2(ay, az) * DEGREES_PER_RADIAN;
+                        orientation.pitch = std::atan2(-ax, verticalLength) * DEGREES_PER_RADIAN;
+                        orientation.tiltInitialized = true;
+                }
+                calibrateGyroscope(orientation, sample, accelerationG);
+                orientation.previousTimestamp = sample.timestamp;
+                return;
+        }
+        // 起動直後は静止サンプルの平均を取り、ジャイロのゼロ点を求める。
+
+        double samplePeriod = 1.0 / IMU_SAMPLE_RATE_HZ;
+        if (orientation.previousTimestamp != 0 && sample.timestamp != 0) {
+                const auto previousTimestamp  = orientation.previousTimestamp;
+                orientation.previousTimestamp = sample.timestamp;
+                if (sample.timestamp <= previousTimestamp)
+                        return;
+                samplePeriod = (sample.timestamp - previousTimestamp) / 1000.0;
+                if (samplePeriod > MAX_SAMPLE_PERIOD)
+                        return;
+        }
+        orientation.previousTimestamp = sample.timestamp;
+        // 時刻の逆行や長い欠落を、そのまま大きな回転として積分しない。
+
+        const auto correctedRate = [](int16_t raw, double bias) {
+                const double rate = raw * GYRO_SENSITIVITY_DPS_PER_LSB - bias;
+                return std::abs(rate) < GYRO_NOISE_THRESHOLD_DPS ? 0.0 : rate;
+        };
+        const double predictedRoll =
+                orientation.roll +
+                correctedRate(sample.rot.x, orientation.gyroBias[0]) * samplePeriod;
+        const double predictedPitch =
+                orientation.pitch +
+                correctedRate(sample.rot.y, orientation.gyroBias[1]) * samplePeriod;
+        orientation.yaw = wrapDegrees(
+                orientation.yaw +
+                correctedRate(sample.rot.z, orientation.gyroBias[2]) * samplePeriod);
+
+        if (!gravityValid) {
                 orientation.roll  = wrapDegrees(predictedRoll);
                 orientation.pitch = wrapDegrees(predictedPitch);
                 return;
@@ -228,9 +342,10 @@ void drawOrientation(FILE* file, const Orientation& orientation)
         std::fprintf(file, "%f %f %f\nEOD\n", forward.x, forward.y, forward.z);
         std::fprintf(
                 file,
-                "set title 'IMU orientation: roll %.1f, pitch %.1f, yaw %.1f deg'\n"
+                "set title 'IMU orientation%s: roll %.1f, pitch %.1f, yaw %.1f deg'\n"
                 "splot $plane using 1:2:3 with pm3d fillcolor rgb '#00AEEF', "
                 "$forward using 1:2:3 with lines linewidth 4 linecolor rgb '#F28E2B'\n",
+                orientation.gyroCalibrated ? "" : " (calibrating - keep still)",
                 orientation.roll,
                 orientation.pitch,
                 orientation.yaw);
@@ -386,6 +501,7 @@ void runImuOrientation(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
         FILE* file = process.get();
 
         configureOrientationPlot(file);
+        logger::log("IMU: keep the sensor still for about 2 seconds to calibrate the gyroscope");
 
         Orientation orientation;
         RedrawTimer timer;

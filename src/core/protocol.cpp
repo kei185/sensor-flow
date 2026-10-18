@@ -124,13 +124,13 @@ drive(std::stop_token                      st,
 
                 auto payload = std::array<uint8_t, 2>{directive.left, directive.right};
 
-                auto ack = transmitter.session(st, mQueue, frame::OperationType::MOTOR, payload);
+                auto result = transmitter.transmit(frame::OperationType::MOTOR, payload);
 
-                if (!ack) {
-                        if (ack.error().code == error::Code::THREAD_ABORTED)
-                                return std::unexpected(ack.error());
+                if (!result) {
+                        if (result.error().code == error::Code::THREAD_ABORTED)
+                                return std::unexpected(result.error());
 
-                        logger::log(error::toString(ack.error()));
+                        logger::log(error::toString(result.error()));
                         continue;
                 }
         }
