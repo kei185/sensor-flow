@@ -18,10 +18,8 @@ constexpr double rotation(double v_l, double v_r, double r) { return (v_r - v_l)
 constexpr std::pair<double, double>
 toVelocityRatio(double v_t, double v_o, double r, double MAX_VELOCITY)
 {
-        double left, right;
-
-        right = 3.0 / 2.0 * v_t - r * v_o / 2.0;
-        left  = (r * v_o - v_t) / 2.0;
+        const double left  = v_t - r * v_o / 2.0;
+        const double right = v_t + r * v_o / 2.0;
 
         return {left / MAX_VELOCITY, right / MAX_VELOCITY};
 }
