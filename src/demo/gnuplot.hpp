@@ -10,7 +10,8 @@ namespace demo
 {
 
 void run(std::stop_token, xqueue::Queue<frame::LidarPoint>&);
-// Both IMU plots consume the queue, so run only one for a given queue.
+// IMUデモは同じキューを消費するので、1つだけ起動する。
+void runImuTranslation(std::stop_token, xqueue::Queue<frame::Imu>&);
 void runImuTimeSeries(std::stop_token, xqueue::Queue<frame::Imu>&);
 void runImuOrientation(std::stop_token, xqueue::Queue<frame::Imu>&);
 

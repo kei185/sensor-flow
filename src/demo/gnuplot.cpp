@@ -20,9 +20,10 @@ namespace demo
 {
 namespace
 {
-constexpr size_t LIDAR_MAX_POINTS = 720;
-constexpr size_t IMU_MAX_POINTS   = 1000;
-constexpr auto   REDRAW_INTERVAL  = std::chrono::milliseconds(50);
+constexpr size_t LIDAR_MAX_POINTS        = 720;
+constexpr size_t IMU_MAX_POINTS          = 1000;
+constexpr double IMU_TIME_WINDOW_SECONDS = 10.0;
+constexpr auto   REDRAW_INTERVAL         = std::chrono::milliseconds(50);
 
 struct RedrawTimer
 {
@@ -415,6 +416,75 @@ void run(std::stop_token st, xqueue::Queue<frame::LidarPoint>& inQueue)
                 for (const auto& point : points)
                         std::fprintf(file, "%s\n", toString(point).c_str());
                 std::fputs("e\n", file);
+                std::fflush(file);
+        }
+}
+
+void runImuTranslation(std::stop_token st, xqueue::Queue<frame::Imu>& inQueue)
+{
+        if (st.stop_requested())
+                return;
+
+        auto process = openGnuplot();
+        if (!process)
+                return;
+        FILE* file = process.get();
+
+        configureImuTimeSeriesPlot(file);
+        std::fputs(
+                "set title 'IMU translation (acceleration)'\n"
+                "set ylabel 'Acceleration raw value'\n"
+                "unset y2label\n"
+                "unset y2tics\n",
+                file);
+
+        std::deque<ImuSample> points;
+        const auto            start = std::chrono::steady_clock::now();
+        RedrawTimer           timer;
+
+        while (readPlotBatch(st, inQueue, timer, [&](frame::Imu value) {
+                const double time =
+                        std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+                                .count();
+                points.push_back({time, value});
+                // 直近10秒を残し、古いサンプルを捨てる。
+                while (points.size() > IMU_MAX_POINTS ||
+                       points.front().time < time - IMU_TIME_WINDOW_SECONDS)
+                        points.pop_front();
+        })) {
+                auto minimum = points.front().value.trans.x;
+                auto maximum = minimum;
+
+                std::fputs("$imu << EOD\n", file);
+                for (const auto& point : points) {
+                        const auto& trans = point.value.trans;
+                        minimum           = std::min({minimum, trans.x, trans.y, trans.z});
+                        maximum           = std::max({maximum, trans.x, trans.y, trans.z});
+                        std::fprintf(
+                                file,
+                                "%.6f %d %d %d\n",
+                                point.time,
+                                trans.x,
+                                trans.y,
+                                trans.z);
+                }
+                std::fputs("EOD\n", file);
+
+                // 一定値や全軸0でも表示できるよう、上下に余白を設ける。
+                const double padding = std::max(1.0, (maximum - minimum) * 0.05);
+                // 起動直後も時間軸を10秒幅に保ち、10秒を超えたら横へ流す。
+                const double end = std::max(points.back().time, IMU_TIME_WINDOW_SECONDS);
+                std::fprintf(
+                        file,
+                        "set xrange [%.6f:%.6f]\n"
+                        "set yrange [%f:%f]\n"
+                        "plot $imu using 1:2 title 'Translation X' linestyle 1, "
+                        "$imu using 1:3 title 'Translation Y' linestyle 2, "
+                        "$imu using 1:4 title 'Translation Z' linestyle 3\n",
+                        end - IMU_TIME_WINDOW_SECONDS,
+                        end,
+                        minimum - padding,
+                        maximum + padding);
                 std::fflush(file);
         }
 }

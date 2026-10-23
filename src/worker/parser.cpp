@@ -1,6 +1,7 @@
 #include "worker/parser.hpp"
 #include "core/frame.hpp"
 #include "utility/toInt.hpp"
+#include "utility/numecric.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -75,13 +76,13 @@ template <> std::vector<frame::Imu> Parser<frame::Imu>::parsePayload(frame::Fram
 
 template <> std::vector<frame::Encoder> Parser<frame::Encoder>::parsePayload(frame::Frame& fr)
 {
-        if (fr.payload.size() < 2 * sizeof(int16_t))
+        if (fr.payload.size() < 2 * sizeof(int32_t))
                 return {};
 
         return {{
                 .timestamp = fr.timestamp,
-                .right     = toSignedInt16(fr.payload.data() + sizeof(int16_t)) / 64.0f,
-                .left      = toSignedInt16(fr.payload.data()) / 64.0f,
+                .right = toSignedInt32(fr.payload.data() + sizeof(int32_t)) / COUNTS_PER_REVOLUTION,
+                .left  = toSignedInt32(fr.payload.data()) / COUNTS_PER_REVOLUTION,
         }};
 }
 

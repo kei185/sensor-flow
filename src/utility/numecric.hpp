@@ -13,6 +13,7 @@ struct Cartesian
         double z;
 };
 
+constexpr double COUNTS_PER_REVOLUTION = 2800.0;
 constexpr double translation(double v_l, double v_r) { return (v_l + v_r) / 2.0; }
 constexpr double rotation(double v_l, double v_r, double r) { return (v_r - v_l) / r; }
 constexpr std::pair<double, double>

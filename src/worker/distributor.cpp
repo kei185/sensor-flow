@@ -31,7 +31,13 @@ void DeviceController::run(std::stop_token st)
 
 template <> void Plotter<frame::LidarPoint>::run(std::stop_token st)
 {
-        demo::run(st, this->inQueue);
+        // demo::run(st, this->inQueue);
+        while (!st.stop_requested()) {
+                if (!this->inQueue.waitData(st))
+                        break;
+
+                this->inQueue.pop();
+        }
 }
 
 /**
@@ -40,7 +46,7 @@ template <> void Plotter<frame::LidarPoint>::run(std::stop_token st)
 
 template <> void Plotter<frame::Imu>::run(std::stop_token st)
 {
-        demo::runImuOrientation(st, this->inQueue);
+        demo::runImuTranslation(st, this->inQueue);
 }
 
 /**

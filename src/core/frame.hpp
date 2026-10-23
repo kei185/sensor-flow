@@ -226,8 +226,8 @@ struct Encoder
 {
 
         uint64_t timestamp;
-        float    right;
-        float    left;
+        double   right;
+        double   left;
 };
 
 struct systemMessage

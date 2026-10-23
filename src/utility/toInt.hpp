@@ -20,3 +20,4 @@ constexpr uint16_t toInt16(const uint8_t* p)
 }
 
 constexpr int16_t toSignedInt16(const uint8_t* p) { return std::bit_cast<int16_t>(toInt16(p)); }
+constexpr int32_t toSignedInt32(const uint8_t* p) { return std::bit_cast<int32_t>(toInt32(p)); }
