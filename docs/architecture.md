@@ -1,174 +1,174 @@
 # Architecture
 
-This document describes the current implementation, including ownership, worker lifecycle, and data flow.
+Current implementation. [Typed pipelines](typed-pipelines.md) are a proposal.
+Host parsing: [frame.md](frame.md).
+Wire format and payloads: [sensor-echo Frame Format](https://github.com/kei185/sensor-echo/blob/main/docs/frame.md).
 
-## Class Diagram
+## Data flow
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#1F2230", "primaryColor": "#303648", "primaryTextColor": "#E5E7EB", "primaryBorderColor": "#9CA3AF", "lineColor": "#E5E7EB", "textColor": "#E5E7EB"}}}%%
+flowchart LR
+    device["Serial device"] --> receiver["Receiver<br/>Read frames and route by stream"]
+    receiver --> raw["Raw frame queues"]
+    raw --> parser["Parser<br/>Decode each stream"]
+    parser --> parsed["Parsed data queues"]
+    subgraph distributors["Distributor"]
+        sensor["Sensor output"]
+        controller["Device control"]
+    end
+    parsed -->|Sensor data| sensor
+    parsed -->|System messages| controller
+    sensor --> output["Plots, recording, or application"]
+    directives["Motor command queue"] --> controller
+    controller --> transmitter["Transmitter"]
+    transmitter -->|Commands| device
+```
+
+There is one Parser and one Distributor for each stream: SYSTEM, LiDAR, IMU,
+and Encoder. SYSTEM groups device status messages and command acknowledgements.
+
+| Distributor | Current behavior |
+| --- | --- |
+| SYSTEM | Runs device startup and the motor command loop |
+| LiDAR | Drains the queue; plotting is disabled |
+| IMU | Plots raw acceleration on three axes |
+| Encoder | Drains the queue |
+
+The active IMU Distributor keeps the last 10 seconds, up to 1000 samples,
+against elapsed host time. It does not integrate acceleration or remove gravity.
+Other IMU views include six-axis time series, orientation, and raw CSV recording.
+The CSV recorder appends timestamped raw values to `debug/imu.csv`.
+Use one Distributor per parsed data queue.
+
+## Ownership
+
+| Manager member | Owned resource | Used by |
+| --- | --- | --- |
+| `port` | One Port | Receiver reads; Transmitter writes |
+| `frameStreams` | Map of raw frame queues | Receiver and Parser |
+| `dataStreams` | Map of parsed data queues | Parser and Distributor |
+| `directiveQueue` | Queue of MotorCommand | Command producer and SYSTEM Distributor |
+| `transmitter` | One Transmitter | SYSTEM Distributor |
+| `receiverWorker` | Receiver processor and thread | Serial RX |
+| `parsers` | Map of Parser workers | One per stream |
+| `distributors` | Map of Distributor workers | One per stream |
+
+Parsed queues share a common base class. Each processor borrows a queue of its
+concrete data type.
+
+## Workers
+
+```mermaid
 classDiagram
-    direction LR
-
-    class Manager {
-        -io::Port port
-        -map~Type, queue_Frame~ frameStreams
-        -DataStreams dataStreams
-        -unique_ptr~Transmitter~ transmitter
-        -Worker receiverWorker
-        -map~Type, Worker~ parsers
-        -map~Type, Worker~ distributors
-        +run() expected~void, Error~
-    }
-
     class Worker {
-        +unique_ptr~Processor~ instance
-        +jthread thread
-        +dispatch() expected~void, Error~
-        +abort() expected~void, Error~
+        +dispatch()
+        +abort()
     }
-
-    class DataStreams {
-        +unique_ptr~queue_systemMessage~ system
-        +unique_ptr~queue_LidarPoint~ lidar
-    }
-
-    class Receiver {
-        +io::Port& port
-        +map~Type, queue_Frame~& outQueues
-        +run(stop_token)
-    }
-
-    class Processor {
-        <<abstract>>
-        +run(stop_token)*
-    }
-
-    class Parser_T {
-        <<template T>>
-        +Type type
-        +queue_Frame& inQueue
-        +queue_T& outQueue
-        +run(stop_token)
-        +parsePayload(Frame&) vector_T
-    }
-
-    class DeviceController {
-        +Type type
-        +Transmitter& transmitter
-        +queue_systemMessage& inQueue
-        +run(stop_token)
-    }
-
-    class Plotter_T {
-        <<template T>>
-        +Type type
-        +queue_T& inQueue
-        +run(stop_token)
-        +distributeStuff(T)
-    }
-
-    class Transmitter {
-        +io::Port& port
-        +transmit(OperationType) expected~void, Error~
-        +request(stop_token, OperationType, systemQueue) expected~void, Error~
-    }
-
-    Manager *-- DataStreams : owns
-    Manager *-- Worker : owns workers
-    Manager *-- Transmitter : owns
-    Worker *-- Processor : owns instance
+    class Parser_T["Parser"]
+    class DeviceController["Distributor: DeviceController"]
+    class Plotter_T["Distributor: Plotter"]
+    Manager *-- Worker : owns
+    Worker *-- Processor : unique_ptr instance
+    Worker *-- JThread : thread
     Processor <|-- Receiver
     Processor <|-- Parser_T
     Processor <|-- DeviceController
     Processor <|-- Plotter_T
-    Receiver --> Manager : borrows port and frame queues
-    Parser_T --> Manager : borrows typed queues
-    DeviceController --> Transmitter : borrows
-    DeviceController --> DataStreams : borrows system queue
-    Plotter_T --> DataStreams : borrows data queue
-    Transmitter --> Manager : borrows port
+    note for Worker "Non-template wrapper<br/>dispatch(): start thread<br/>abort(): request stop"
+    note for Processor "run(std::stop_token)"
+    note for JThread "std::jthread"
 ```
 
-`worker::Worker` owns one `processor::Processor` instance and its `std::jthread`. Receivers, parsers, and distributors inherit from `Processor` and implement `run(std::stop_token)`. The constructor accepts a `std::unique_ptr<Processor>`; `dispatch()` and `abort()` return `WORKER_DISPATCH_FAILED` if the instance is missing.
+Starting or stopping a worker fails if its processor is missing.
 
-```cpp
-worker::Worker receiver(std::make_unique<receiver::Receiver>(*port, *frameStreams));
-std::map<frame::Type, worker::Worker> parsers;
-std::map<frame::Type, worker::Worker> distributors;
+## Queue synchronization
+
+```mermaid
+sequenceDiagram
+    participant Parser
+    participant Queue as Parsed data queue
+    participant Distributor
+
+    Distributor->>Queue: Wait for data, stop, or deadline
+    Note over Queue: Check for data under mutex<br/>Wait only while empty
+    Parser->>Queue: Enqueue samples under mutex
+    Note right of Parser: Enqueueing does not notify
+    Parser->>Queue: Notify one Distributor
+    alt Data available
+        Queue-->>Distributor: Data ready
+        Distributor->>Queue: Take a sample under mutex
+        Queue-->>Distributor: Sample
+    else Stop requested or deadline reached
+        Queue-->>Distributor: Stop waiting
+    end
 ```
 
-## Data Flow
+| Stage | Empty-queue behavior |
+| --- | --- |
+| Parser: SYSTEM, IMU, Encoder | Wait for Receiver notification or stop |
+| Parser: LiDAR | Poll; Receiver does not notify it |
+| Distributor: all streams | Wait for Parser notification or stop |
+| SYSTEM Distributor: motor command loop | Wait for command-producer notification or stop |
+
+## Initialization and execution
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Init as Initialization
+    participant Manager
+    participant Receiver
+    participant Parsers as Parser workers
+    participant Distributors as Distributor workers
+
+    App->>Init: Initialize with serial path
+    Init->>Init: Create port, queues, transmitter, and processors
+    Note right of Init: Port: 230400 bps, 8 data bits<br/>No parity, one stop bit
+    Init->>Manager: Transfer ownership of resources and workers
+    Init-->>App: Manager
+    App->>Manager: Start processing
+    Manager->>Receiver: Start worker
+    Manager->>Parsers: Start each worker
+    Manager->>Distributors: Start each worker
+    Manager->>Receiver: Wait for thread to finish
+```
+
+## Host protocol
+
+Frame exchanges and firmware recovery:
+[sensor-echo Protocol](https://github.com/kei185/sensor-echo/blob/main/docs/protocol.md).
 
 ```mermaid
 flowchart LR
-    source[Serial device]
-    io[(Manager::port)]
-    receiver[Worker<br/>Receiver]
-    frameType{Valid frame type}
-    systemFrames[(SYSTEM Frame queue)]
-    lidarFrames[(LIDAR Frame queue)]
-    systemParser[Worker<br/>Parser of systemMessage]
-    lidarParser[Worker<br/>Parser of LidarPoint]
-    systemData[(systemMessage queue)]
-    lidarData[(LidarPoint queue)]
-    controller[Worker<br/>DeviceController]
-    plotter[Worker<br/>Plotter of LidarPoint]
-    transmitter[Transmitter]
-    output[Console or plot output]
-
-    source -->|incoming bytes| io
-    io --> receiver
-    receiver --> frameType
-    frameType -->|Non-sensor messages: 0x04 to 0x0F| systemFrames
-    frameType -->|Sensor data: LIDAR 0x01| lidarFrames
-    systemFrames --> systemParser --> systemData --> controller
-    lidarFrames --> lidarParser --> lidarData --> plotter --> output
-    controller -->|operation request| transmitter
-    transmitter -->|command bytes| io
-
-    linkStyle default stroke:#E5E7EB,stroke-width:2px;
+    clear["SYSTEM Distributor<br/>Clear old system messages"] --> startup["Handshake, readiness,<br/>and time synchronization"]
+    startup -->|Failure| clear
+    startup -->|Success| enter["Wait for ENTER"]
+    enter --> scan["Request scan start"]
+    scan -->|Failure| clear
+    scan -->|Success| drive["Wait for a motor command"]
+    drive --> transmit["Send through Transmitter"]
+    transmit --> drive
 ```
 
-`Receiver` uses `frameQueueMUX()` to route LIDAR (`0x01`), IMU (`0x02`), and Encoder (`0x03`) to their sensor-specific Frame queues. Non-sensor messages (`0x04` through `0x0F`), including command ACKs, go to the SYSTEM Frame queue.
+Startup retries continue until stopped. Command ACKs, READY, and TIME REPORT
+each have a 3-second wait limit. Other system messages are consumed and logged;
+STARTUP FAILED ends a READY or TIME REPORT wait with an error.
 
-The diagram shows the SYSTEM and LIDAR paths. IMU and Encoder also have Frame queues, typed data queues, parser workers, and distributor workers created by `application::init()`. Ill-formed sensor payloads that cannot contain a complete sample are ignored; the parser continues with the next frame. See [Frame Payload Parsing](frame.md) for the size rules and Encoder decoding.
+The motor command loop does not convert velocity, clamp values, or wait for a
+motor ACK. The current main does not produce motor commands.
 
-`Manager` owns one `io::Port`. `Receiver` reads incoming bytes from its POSIX file descriptor, while `Transmitter` writes commands through the same port.
-
-## Initialization and Execution
+## Shutdown and limits
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#1F2230", "primaryColor": "#303648", "primaryTextColor": "#E5E7EB", "primaryBorderColor": "#9CA3AF", "lineColor": "#E5E7EB", "textColor": "#E5E7EB", "actorLineColor": "#E5E7EB", "signalColor": "#E5E7EB", "signalTextColor": "#E5E7EB"}}}%%
-sequenceDiagram
-    participant App
-    participant Init as application::init
-    participant ReceiverStage as Worker (Receiver)
-    participant ParserStages as Workers (Parser)
-    participant DistributorStages as Workers (Distributor)
-    participant Manager
-
-    App->>Init: init(path)
-    Init->>Init: create Port, Transmitter, and queues
-    Init->>ReceiverStage: Worker(make_unique of Receiver)
-    Init->>ParserStages: worker(type, frame queue, data queue)
-    Init->>DistributorStages: worker(type, data queue, ...)
-    Init->>Manager: inject resources and workers
-    Init-->>App: unique_ptr of Manager
-    App->>Manager: run()
-    Manager->>ReceiverStage: dispatch()
-    Manager->>ParserStages: dispatch() each worker
-    Manager->>DistributorStages: dispatch() each worker
+flowchart LR
+    destructor["Manager destruction"] --> stop["Request stop on Receiver, Parser, and Distributor workers"]
+    stop --> cancellable["Queue waits return on stop"]
+    stop --> blocking["Serial read or ENTER wait<br/>May remain blocked"]
+    cancellable --> returned["Processing ends"]
+    blocking -->|After blocking call returns| returned
+    returned --> join["Wait for worker threads before destruction completes"]
 ```
 
-`application::init()` constructs processors and workers, then passes the resources and workers into `Manager` through its constructor. Threads are started later by `Manager::run()` through `Worker::dispatch()`.
-
-## Shutdown
-
-`Worker::abort()` requests cancellation through the worker's `std::jthread`. The `jthread` destructor subsequently joins the thread. Every component must check its `std::stop_token` regularly and return after cancellation is requested.
-
-## Current Limitations
-
-- The queues are accessed from multiple threads, but `std::queue` is not thread-safe. A synchronized queue abstraction is still required.
-- Empty queues are polled continuously, creating busy-wait loops. A condition variable or blocking queue would avoid unnecessary CPU use.
-- `frameStreams` and the queues inside `DataStreams` are heap-allocated even though `Manager` has sole ownership. They could be stored directly unless stable indirection is required.
-- Initialization is listed explicitly for every frame type. This is verbose, but keeps the mapping between frame type, parsed data type, and distributor visible.
+- Queues have no size limit or backpressure.
+- Receiver I/O failures are logged and terminate the process.
+- A SYSTEM Distributor startup retry does not reset the MCU or fully recover an active firmware session.

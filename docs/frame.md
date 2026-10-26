@@ -1,51 +1,89 @@
 # Frame Payload Parsing
 
-`Receiver` decodes the serial header's eight-byte little-endian timestamp into
-`Frame.timestamp`. LiDAR, IMU, and Encoder parsers preserve this value in their
-parsed samples. System messages retain the host Unix-millisecond receive time
-used by time synchronization.
+Wire format, payload fields, and units:
+[sensor-echo Frame Format](https://github.com/kei185/sensor-echo/blob/main/docs/frame.md).
+This document covers host parsing. Worker flow: [architecture.md](architecture.md).
 
-## Ill-formed Payloads
+## Receiver validation
 
-Ill-formed sensor payloads that cannot contain a complete sample are ignored.
-`parsePayload()` returns an empty vector, publishes no samples, and lets the
-parser worker continue with the next frame. A malformed payload does not abort
-the worker or produce a partially initialized sample.
+```mermaid
+flowchart LR
+    sof["Find frame start"] --> header["Read header"]
+    header --> crc{"Valid CRC?"}
+    crc -- No --> sof
+    crc -- Yes --> payload["Read payload"]
+    payload --> known{"Known stream?"}
+    known -- No --> discard["Discard frame"]
+    discard --> sof
+    known -- Yes --> queue["Route to Parser queue"]
+    queue --> sof
+    sof -. I/O failure .-> error["Log and exit process"]
+    header -. I/O failure .-> error
+    payload -. I/O failure .-> error
+```
 
-| Parser | Payload layout | Handling |
-|---|---|---|
-| LiDAR | Four bytes per point: distance, then Q6 angle; both 16-bit little-endian | Fewer than four bytes produce no scan. Otherwise, parse complete points and ignore an incomplete trailing record. |
-| IMU | Twelve bytes: six signed 16-bit little-endian axes | Fewer than twelve bytes produce no sample. |
-| Encoder | Eight bytes: left wheel, then right wheel; both signed 32-bit little-endian raw encoder counts | Fewer than eight bytes produce no sample. |
+## Parser behavior
 
-IMU and Encoder decode one sample from the first twelve and eight bytes,
-respectively; any additional payload bytes are ignored. LiDAR retains complete
-points even when one to three trailing bytes cannot form another point.
+| Parser | Payload handling |
+| --- | --- |
+| SYSTEM | Keep the message text and type; use the host parsing time |
+| LiDAR | Decode every complete point; ignore trailing bytes of an incomplete point |
+| IMU | Decode the first sample; ignore extra bytes |
+| Encoder | Decode the first sample; ignore extra bytes |
 
-These rules apply to sensor payload parsing. At the receiver, an invalid header
-CRC or an unrecognized frame type is skipped; an I/O read failure remains an
-error.
+A sensor payload too short for one point or sample produces no parsed data.
+The Parser continues with the next frame.
 
-## Encoder Decoding
+### Timestamps
 
-The Encoder parser emits one `frame::Encoder` per complete payload. Bytes 0–3
-contain the left count, and bytes 4–7 contain the right count. Decode each field
-as a signed 32-bit two's-complement integer, then divide by `2800.0` to obtain
-the wheel rotation change. Store the results in `double` members `left` and
-`right`, and copy the frame's 64-bit timestamp. Positive rotations indicate
-forward wheel motion; negative rotations indicate reverse wheel motion.
+```mermaid
+flowchart LR
+    device["Device frame timestamp"] --> sensor["LiDAR / IMU / Encoder timestamp<br/>Copy unchanged"]
+    now["Host clock when SYSTEM Parser runs"] --> system["System message timestamp<br/>Host ACK time for time sync"]
+```
 
-For example, payload `3E 01 00 00 D5 FF FF FF` contains counts `318` and `-43`,
-yielding `left = 318 / 2800.0` (about `0.113571429` rev) and
-`right = -43 / 2800.0` (about `-0.015357143` rev).
-The wire counts range from `-2147483648` through `2147483647` per sample.
-The current firmware uses 2800 counts per wheel revolution and targets a
-100 ms sampling period. Parsed values are rotations, not radians or rotations
-per second. Consumers apply the wheel circumference and sampling period to
-these rotation changes when velocity is needed.
+The SYSTEM timestamp is not captured directly by the Receiver's serial read.
+Queue delay can affect it.
 
-The wire type is unchanged, but the payload size and units differ from the
-former 4-byte Q6 wheel rotations. Update the firmware, parser, and consumers
-together. Old 4-byte Encoder payloads are ignored as incomplete samples.
-Encoder frames use wire type `0x03` and are routed to the existing Encoder frame
-queue before parsing.
+### LiDAR
+
+```mermaid
+flowchart LR
+    packet["Complete points in one payload"] --> distances["All distances"] --> points["LidarPoint.point<br/>double values"]
+    packet --> angles["First and last angle"] --> bounds["angleStart / angleEnd<br/>Degrees"]
+    bounds --> span["span = end - start<br/>Add 360 if negative"]
+    span --> step["angleDiff = span / (N - 1)<br/>N = 1: angleDiff = 0"]
+```
+
+Intermediate encoded angles are not retained. Reconstructing them from the
+start angle and angle step, collecting a full rotation, and converting to Cartesian
+coordinates are left to the Distributor or application.
+
+### IMU
+
+```mermaid
+flowchart LR
+    gyro["Gyroscope X / Y / Z"] --> rot["Imu.rot<br/>Raw angular velocity"]
+    accel["Accelerometer X / Y / Z"] --> trans["Imu.trans<br/>Raw acceleration"]
+```
+
+The Parser does not apply sensitivity or integrate the readings.
+The field names do not imply orientation or position.
+
+### Encoder
+
+```mermaid
+flowchart LR
+    left["Left count change"] --> leftScale["Convert to wheel turns"] --> leftOut["Encoder.left<br/>double"]
+    right["Right count change"] --> rightScale["Convert to wheel turns"] --> rightOut["Encoder.right<br/>double"]
+```
+
+The Distributor or application can calculate speed from successive timestamps:
+
+```text
+elapsed_seconds = (timestamp_now - timestamp_previous) / 1000.0
+wheel_rev_per_second = wheel_rotation_change / elapsed_seconds
+wheel_metres_per_second = wheel_rev_per_second * wheel_circumference
+```
+
+The elapsed time must be positive.
