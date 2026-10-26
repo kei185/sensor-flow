@@ -8,24 +8,25 @@ Wire format and payloads: [sensor-echo Frame Format](https://github.com/kei185/s
 
 ```mermaid
 flowchart LR
-    device["Serial device"] --> receiver["Receiver<br/>Read frames and route by stream"]
+    device["Serial device"] --> receiver["Receiver<br/>Route by stream"]
     receiver --> raw["Raw frame queues"]
-    raw --> parser["Parser<br/>Decode each stream"]
-    parser --> parsed["Parsed data queues"]
-    subgraph distributors["Distributor"]
-        sensor["Sensor output"]
-        controller["Device control"]
-    end
-    parsed -->|Sensor data| sensor
-    parsed -->|System messages| controller
-    sensor --> output["Plots, recording, or application"]
-    directives["Motor command queue"] --> controller
-    controller --> transmitter["Transmitter"]
+
+    raw -->|SYSTEM| systemParser["Parser<br/>SYSTEM"]
+    raw -->|LiDAR| lidarParser["Parser<br/>LiDAR"]
+    raw -->|IMU| imuParser["Parser<br/>IMU"]
+    raw -->|Encoder| encoderParser["Parser<br/>Encoder"]
+
+    systemParser --> systemQueue["systemMessage queue"] --> systemDistributor["Distributor<br/>SYSTEM"]
+    lidarParser --> lidarQueue["LidarPoint queue"] --> lidarDistributor["Distributor<br/>LiDAR"]
+    imuParser --> imuQueue["Imu queue"] --> imuDistributor["Distributor<br/>IMU"]
+    encoderParser --> encoderQueue["Encoder queue"] --> encoderDistributor["Distributor<br/>Encoder"]
+
+    directives["Motor command queue"] --> systemDistributor
+    systemDistributor --> transmitter["Transmitter"]
     transmitter -->|Commands| device
 ```
 
-There is one Parser and one Distributor for each stream: SYSTEM, LiDAR, IMU,
-and Encoder. SYSTEM groups device status messages and command acknowledgements.
+SYSTEM groups device status messages and command acknowledgements.
 
 | Distributor | Current behavior                               |
 | ----------- | ---------------------------------------------- |
