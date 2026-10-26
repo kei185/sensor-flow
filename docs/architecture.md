@@ -27,31 +27,25 @@ flowchart LR
 There is one Parser and one Distributor for each stream: SYSTEM, LiDAR, IMU,
 and Encoder. SYSTEM groups device status messages and command acknowledgements.
 
-| Distributor | Current behavior |
-| --- | --- |
-| SYSTEM | Runs device startup and the motor command loop |
-| LiDAR | Drains the queue; plotting is disabled |
-| IMU | Plots raw acceleration on three axes |
-| Encoder | Drains the queue |
-
-The active IMU Distributor keeps the last 10 seconds, up to 1000 samples,
-against elapsed host time. It does not integrate acceleration or remove gravity.
-Other IMU views include six-axis time series, orientation, and raw CSV recording.
-The CSV recorder appends timestamped raw values to `debug/imu.csv`.
-Use one Distributor per parsed data queue.
+| Distributor | Current behavior                               |
+| ----------- | ---------------------------------------------- |
+| SYSTEM      | Runs device startup and the motor command loop |
+| LiDAR       | Drains the queue; plotting is disabled         |
+| IMU         | Plots raw acceleration on three axes           |
+| Encoder     | Drains the queue                               |
 
 ## Ownership
 
-| Manager member | Owned resource | Used by |
-| --- | --- | --- |
-| `port` | One Port | Receiver reads; Transmitter writes |
-| `frameStreams` | Map of raw frame queues | Receiver and Parser |
-| `dataStreams` | Map of parsed data queues | Parser and Distributor |
-| `directiveQueue` | Queue of MotorCommand | Command producer and SYSTEM Distributor |
-| `transmitter` | One Transmitter | SYSTEM Distributor |
-| `receiverWorker` | Receiver processor and thread | Serial RX |
-| `parsers` | Map of Parser workers | One per stream |
-| `distributors` | Map of Distributor workers | One per stream |
+| Manager member   | Owned resource                | Used by                                 |
+| ---------------- | ----------------------------- | --------------------------------------- |
+| `port`           | One Port                      | Receiver reads; Transmitter writes      |
+| `frameStreams`   | Map of raw frame queues       | Receiver and Parser                     |
+| `dataStreams`    | Map of parsed data queues     | Parser and Distributor                  |
+| `directiveQueue` | Queue of MotorCommand         | Command producer and SYSTEM Distributor |
+| `transmitter`    | One Transmitter               | SYSTEM Distributor                      |
+| `receiverWorker` | Receiver processor and thread | Serial RX                               |
+| `parsers`        | Map of Parser workers         | One per stream                          |
+| `distributors`   | Map of Distributor workers    | One per stream                          |
 
 Parsed queues share a common base class. Each processor borrows a queue of its
 concrete data type.
@@ -103,11 +97,11 @@ sequenceDiagram
     end
 ```
 
-| Stage | Empty-queue behavior |
-| --- | --- |
-| Parser: SYSTEM, IMU, Encoder | Wait for Receiver notification or stop |
-| Parser: LiDAR | Poll; Receiver does not notify it |
-| Distributor: all streams | Wait for Parser notification or stop |
+| Stage                                  | Empty-queue behavior                           |
+| -------------------------------------- | ---------------------------------------------- |
+| Parser: SYSTEM, IMU, Encoder           | Wait for Receiver notification or stop         |
+| Parser: LiDAR                          | Poll; Receiver does not notify it              |
+| Distributor: all streams               | Wait for Parser notification or stop           |
 | SYSTEM Distributor: motor command loop | Wait for command-producer notification or stop |
 
 ## Initialization and execution
